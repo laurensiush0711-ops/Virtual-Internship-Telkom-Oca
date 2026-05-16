@@ -544,12 +544,12 @@ const CHARTS = (() => {
     } else {
       // Fallback: generate from dummy data
       const allUsers = DATA.users.filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
-                                               (userFilter === 'All' || u.name === userFilter));
+                                               (userFilter === 'All' || u.name === userFilter || u.user_name === userFilter));
       const totalRev = Object.values(summary).reduce((s, ch) => s + ch.revenue, 0);
       userRevenue = allUsers.map((u, i) => {
         const share = (allUsers.length - i) / (allUsers.length * (allUsers.length + 1) / 2);
         const rev = Math.round(totalRev * share * 0.6);
-        return { name: u.name, industry: u.industry, revenue: rev, transactions: Math.round(rev / 2500) };
+        return { name: u.user_name || u.name, industry: u.industry, revenue: rev, transactions: Math.round(rev / 2500) };
       }).sort((a, b) => b.revenue - a.revenue);
     }
 
@@ -617,7 +617,7 @@ const CHARTS = (() => {
       // Fallback: generate simulated churn data
       churnUsers = DATA.users
         .filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
-                     (userFilter === 'All' || u.name === userFilter))
+                     (userFilter === 'All' || u.name === userFilter || u.user_name === userFilter))
         .map((u, i) => {
           const seed = u.id ? u.id.charCodeAt(u.id.length - 1) : (i * 7 + 13);
           const daysInactive = 2 + (seed % 25);
@@ -941,7 +941,7 @@ const CHARTS = (() => {
     } else {
       // Simulate mono-channel detection from dummy data
       const allUsers = DATA.users.filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
-                                               (userFilter === 'All' || u.name === userFilter));
+                                               (userFilter === 'All' || u.name === userFilter || u.user_name === userFilter));
       monoUsers = allUsers.map((u, i) => {
         const seed = i * 13 + 7;
         const channelIdx = seed % 4;
@@ -949,7 +949,7 @@ const CHARTS = (() => {
         const channel = channelNames[channelIdx];
         const baseRev = 5000000 + (seed * 150000 % 20000000);
         return {
-          name: u.name,
+          name: u.user_name || u.name,
           industry: u.industry,
           channel,
           channelIdx,
@@ -1074,12 +1074,12 @@ const CHARTS = (() => {
     } else {
       churnUsers = DATA.users
         .filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
-                     (userFilter === 'All' || u.name === userFilter))
+                     (userFilter === 'All' || u.name === userFilter || u.user_name === userFilter))
         .map((u, i) => {
           const seed = u.id ? u.id.charCodeAt(u.id.length - 1) : (i * 7 + 13);
           const daysInactive = 2 + (seed % 25);
           const riskScore = Math.min(95, 20 + daysInactive * 2 + (seed % 15));
-          return { name: u.name, industry: u.industry, riskScore, daysInactive };
+          return { name: u.user_name || u.name, industry: u.industry, riskScore, daysInactive };
         })
         .filter(u => u.riskScore > 40)
         .sort((a, b) => b.riskScore - a.riskScore);

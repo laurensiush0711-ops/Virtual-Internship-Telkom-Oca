@@ -53,6 +53,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
     const users = rawUsers.map(u => ({
       ...u,
       industry: u.field_of_business || u.industry || '',
+      name: u.user_name || u.name || u.id,
       user_name: u.user_name || u.name || u.id
     }));
     const industries = [...new Set(users.map(u => u.industry).filter(Boolean))].sort();
