@@ -1,0 +1,9 @@
+# OS files
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# No node_modules or build artifacts (static site)
