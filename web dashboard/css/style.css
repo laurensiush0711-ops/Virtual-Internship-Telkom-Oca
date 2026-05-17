@@ -86,7 +86,7 @@ body {
   font-weight: 500;
   cursor: pointer;
   outline: none;
-  min-width: 120px;
+  min-width: 140px;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -112,7 +112,7 @@ body {
   font-weight: 500;
   font-family: inherit;
   outline: none;
-  min-width: 130px;
+  min-width: 150px;
   cursor: pointer;
   color-scheme: dark;
 }
@@ -214,6 +214,9 @@ body {
 .tab-content {
   display: none;
   padding: 24px 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .tab-content.active {
@@ -334,17 +337,20 @@ body {
   height: 280px;
 }
 
+.chart-grid-3 .chart-wrapper {
+  height: 320px;
+}
+
 .chart-card.tall .chart-wrapper {
-  height: 380px;
+  height: 420px;
 }
 
 /* ---- TABLES ---- */
-.table-card {
-  background: var(--card-bg);
-  border-radius: var(--radius);
-  padding: 20px;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border);
+.table-card,
+#top-users-table,
+#churn-risk-table,
+#mono-channel-table,
+#channel-stability-table {
   overflow-x: auto;
 }
 
@@ -547,8 +553,13 @@ body {
 }
 
 /* ---- CHURN ALERT COMPACT ---- */
+#churn-alert-overview {
+  height: auto;
+  min-height: 200px;
+  overflow-y: auto;
+}
 .churn-item {
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
 }
 .churn-item:last-child {
@@ -559,11 +570,17 @@ body {
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
+  min-width: 0;
 }
 .churn-name {
   font-weight: 600;
   font-size: 13px;
   color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 .churn-item-bottom {
   display: flex;
