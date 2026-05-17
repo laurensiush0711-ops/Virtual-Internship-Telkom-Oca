@@ -66,8 +66,14 @@ const CHARTS = (() => {
 
     const activeUsers = activeUserCount != null ? activeUserCount : 20;
     const successRate = totalTx > 0 ? totalSucc / totalTx : 0;
-    const failureRate = totalTx > 0 ? totalFail / totalTx : 0;
     const billableRate = totalTx > 0 ? totalBill / totalTx : 0;
+
+    // Churn rate: at-risk users / total users
+    const totalUsers = DATA.users ? DATA.users.length : 20;
+    const atRiskUsers = (DATA.churnRisk && DATA.churnRisk.length)
+      ? DATA.churnRisk.length
+      : Math.round(totalUsers * 0.25);
+    const churnRate = totalUsers > 0 ? atRiskUsers / totalUsers : 0;
 
     // Previous period
     let prevTx = 0, prevRev = 0, prevSucc = 0, prevFail = 0, prevBill = 0;
@@ -85,7 +91,6 @@ const CHARTS = (() => {
 
     const prevActiveUsers = prevActiveUserCount != null ? prevActiveUserCount : 20;
     const prevSuccessRate = prevTx > 0 ? prevSucc / prevTx : 0;
-    const prevFailureRate = prevTx > 0 ? prevFail / prevTx : 0;
     const prevBillableRate = prevTx > 0 ? prevBill / prevTx : 0;
 
     // Helper: update a delta element
@@ -130,15 +135,15 @@ const CHARTS = (() => {
     successRateEl.textContent = formatPct(successRate);
     successRateEl.className = 'kpi-value';
 
-    document.getElementById('kpi-failure-rate').textContent = formatPct(failureRate);
+    document.getElementById('kpi-churn-rate').textContent = formatPct(churnRate);
     document.getElementById('kpi-revenue').textContent = formatIDR(totalRev);
     document.getElementById('kpi-billable-rate').textContent = formatPct(billableRate);
 
-    // Update deltas (failure rate is inverted: decrease = good = green up)
+    // Update deltas
     setDelta('delta-total-tx', totalTx, prevTx);
     setDelta('delta-active-users', activeUsers, prevActiveUsers);
     setDelta('delta-success-rate', successRate, prevSuccessRate);
-    setDelta('delta-failure-rate', failureRate, prevFailureRate, true);
+    setDelta('delta-churn-rate', churnRate, null);
     setDelta('delta-revenue', totalRev, prevRev);
     setDelta('delta-billable-rate', billableRate, prevBillableRate);
   }
