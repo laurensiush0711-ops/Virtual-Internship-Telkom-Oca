@@ -1411,10 +1411,11 @@ const CHARTS = (() => {
           if (channel !== 'All' && row.channel !== channel) return;
           if (row.hour === h) {
             if (!hourlyDataByChannel[row.channel][hourKey]) {
-              hourlyDataByChannel[row.channel][hourKey] = { transactions: 0, success: 0 };
+              hourlyDataByChannel[row.channel][hourKey] = { transactions: 0, success: 0, failure: 0 };
             }
             hourlyDataByChannel[row.channel][hourKey].transactions += row.transactions;
             hourlyDataByChannel[row.channel][hourKey].success += row.success;
+            hourlyDataByChannel[row.channel][hourKey].failure += row.fail || 0;
           }
         });
       }
@@ -1427,6 +1428,7 @@ const CHARTS = (() => {
             const e = hourlyDataByChannel[ch][hk];
             e.transactions = Math.round(e.transactions * trendRatio);
             e.success = Math.round(e.success * trendRatio);
+            e.failure = Math.round(e.failure * trendRatio);
           });
         });
       }
@@ -1457,6 +1459,7 @@ const CHARTS = (() => {
               const e = hourlyDataByChannel[ch][hk];
               e.transactions = Math.round(e.transactions * share);
               e.success = Math.round(e.success * share);
+              e.failure = Math.round(e.failure * share);
             });
           });
         }

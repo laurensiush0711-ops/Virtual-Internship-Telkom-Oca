@@ -177,7 +177,9 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
         for (let h = 0; h < 24; h++) {
           const tx = Math.round(avgDaily * pattern[h]);
           const success = Math.round(tx * successRate);
-          const fail = Math.round(tx * (1 - successRate) * 0.85);
+          const fail = (ch === 'Call' || ch === 'SMS')
+            ? Math.max(0, tx - success)
+            : Math.round(tx * (1 - successRate) * 0.85);
           const neutral = tx - success - fail;
           const revenue = Math.round(avgRevenue * pattern[h]);
           result.push({ hour: h, channel: ch, transactions: tx, success, fail, neutral, revenue });
