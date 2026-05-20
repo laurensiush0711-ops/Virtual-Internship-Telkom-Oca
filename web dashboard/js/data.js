@@ -316,7 +316,8 @@ const DATA = (() => {
         }
       });
       // Simulate active users as a fraction of total users
-      users = Math.round(userCount * (tx / (chs.reduce((s, ch) => s + channelBase[ch].avgDaily, 0) * 1.5)));
+      const totalAvgDaily = chs.reduce((s, ch) => s + ((channelBase[ch] && channelBase[ch].avgDaily) || 0), 0);
+      users = Math.round(userCount * (tx / (Math.max(totalAvgDaily, 1) * 1.5)));
       if (users < 1) users = 1;
       if (users > userCount) users = userCount;
       trend[date] = { transactions: tx, success: succ, fail, revenue: rev, activeUsers: users };

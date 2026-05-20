@@ -134,7 +134,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
     }
 
     // Helper: compute daily trend from per-channel daily data
-    function computeTrend(data) {
+    function computeTrend(data, totalUsers) {
       const trend = {};
       Object.values(data).forEach(chDays => {
         Object.entries(chDays).forEach(([date, row]) => {
@@ -149,7 +149,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
       Object.keys(trend).forEach(d => {
         const avgDaily = channels.reduce((s, ch) => s + (channelSummary[ch]?.transactions || 0), 0) / Math.max(allDates.length, 1);
         const ratio = trend[d].transactions / Math.max(avgDaily, 1);
-        const userCount = users.length || 20;
+        const userCount = totalUsers || users.length || 20;
         trend[d].activeUsers = Math.min(userCount, Math.max(1, Math.round(userCount * ratio)));
       });
       return trend;
@@ -242,8 +242,12 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
         return computeSummary(data);
       },
 
-      computeDailyTrend: function(data) {
-        return computeTrend(data);
+      computeDailyTrend: function(data, channels, totalUsers) {
+        return computeTrend(data, totalUsers);
+      },
+
+      getUserShare: function(userName) {
+        return userWeightMap[userName] || (1 / Math.max(users.length, 1));
       }
     };
 

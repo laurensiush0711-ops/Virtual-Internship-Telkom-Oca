@@ -671,16 +671,22 @@ const CHARTS = (() => {
   }
 
   // ---- WHATSAPP READ RATE LINE ----
-  function renderWhatsAppReadRate(canvasId, trend) {
+  function renderWhatsAppReadRate(canvasId, trend, data) {
     destroyChart(canvasId);
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
     const dates = Object.keys(trend).sort();
-    const totalDelivered = dates.map(d => trend[d].success);
-    const totalRead = dates.map((d, i) => Math.round(trend[d].success * (0.38 + (i % 5) * 0.03)));
+    const waData = data && data['WhatsApp'] ? data['WhatsApp'] : {};
+    const deliveryRates = dates.map(d => {
+      if (waData[d]) {
+        return waData[d].transactions > 0 ? waData[d].success / waData[d].transactions : 0;
+      }
+      return trend[d].transactions > 0 ? trend[d].success / trend[d].transactions : 0;
+    });
+    const totalDelivered = dates.map(d => waData[d] ? waData[d].success : trend[d].success);
+    const totalRead = dates.map((d, i) => Math.round(totalDelivered[i] * (0.38 + (i % 5) * 0.03)));
     const readRates = totalDelivered.map((d, i) => d > 0 ? totalRead[i] / d : 0);
-    const deliveryRates = dates.map(d => trend[d].success / trend[d].transactions);
 
     chartInstances[canvasId] = new Chart(canvas, {
       type: 'line',
@@ -1004,7 +1010,7 @@ const CHARTS = (() => {
   }
 
   // ---- CHANNEL STABILITY SCORECARD ----
-  function renderChannelStability(summary) {
+  function renderChannelStability(summary, channelDailyData) {
     const container = document.getElementById('channel-stability-table');
     if (!container) return;
 
@@ -1030,15 +1036,35 @@ const CHARTS = (() => {
     `;
 
     channels.forEach(ch => {
-      // Estimate stability from overall stats (dummy data doesn't have per-day breakdown in summary)
       const s = summary[ch];
-      const baseRate = s.successRate;
-      // Simulate variance based on channel characteristics
-      const variance = ch === 'Call' ? 0.08 : ch === 'Email' ? 0.05 : ch === 'SMS' ? 0.03 : 0.02;
-      const avgRate = baseRate;
-      const minRate = Math.max(0, baseRate - variance * 2);
-      const maxRate = Math.min(1, baseRate + variance * 2);
-      const stdDev = variance;
+      let avgRate = s.successRate;
+      let minRate = avgRate;
+      let maxRate = avgRate;
+      let stdDev = 0.02;
+
+      if (channelDailyData && channelDailyData[ch]) {
+        const dailyRates = [];
+        Object.values(channelDailyData[ch]).forEach(row => {
+          if (row.transactions > 0) {
+            dailyRates.push(row.success / row.transactions);
+          }
+        });
+        if (dailyRates.length > 1) {
+          const sum = dailyRates.reduce((a, b) => a + b, 0);
+          avgRate = sum / dailyRates.length;
+          minRate = Math.min(...dailyRates);
+          maxRate = Math.max(...dailyRates);
+          const variance = dailyRates.reduce((sq, v) => sq + (v - avgRate) ** 2, 0) / (dailyRates.length - 1);
+          stdDev = Math.sqrt(variance);
+        }
+      } else {
+        // Fallback estimate when no daily breakdown available
+        const estVariance = ch === 'Call' ? 0.08 : ch === 'Email' ? 0.05 : ch === 'SMS' ? 0.03 : 0.02;
+        minRate = Math.max(0, avgRate - estVariance * 2);
+        maxRate = Math.min(1, avgRate + estVariance * 2);
+        stdDev = estVariance;
+      }
+
       const stability = stdDev <= 0.03 ? 'Stable' : stdDev <= 0.06 ? 'Moderate' : 'Unstable';
       const stabilityClass = stability.toLowerCase();
 
@@ -1164,7 +1190,7 @@ const CHARTS = (() => {
   }
 
   // ---- PRIOR PERIOD HELPER ----
-  function computePriorData(period, channel, industry, referenceDate, user) {
+  function computePriorData(period, channel, industry, referenceDate, user, defaultBillableRate) {
     if (period === 'all') return {};
     const isHourly = ['1h', '4h', '6h', '12h', '24h'].includes(period);
     if (isHourly) {
@@ -1213,8 +1239,9 @@ const CHARTS = (() => {
           prior[ch][prevDate].revenue = Math.round(prior[ch][prevDate].revenue * share);
         });
       }
+      const billRate = defaultBillableRate || 0.78;
       Object.keys(prior).forEach(ch => {
-        prior[ch][prevDate].billable = Math.round(prior[ch][prevDate].transactions * 0.78);
+        prior[ch][prevDate].billable = Math.round(prior[ch][prevDate].transactions * billRate);
       });
       return prior;
     } else {
@@ -1266,7 +1293,18 @@ const CHARTS = (() => {
         trend = DATA.computeDailyTrend(data, null, filteredUserCount);
       } else {
       data = DATA.getDailyDataForRange(latestDate, latestDate, channel, industry, user);
-      prevData = computePriorData(period, channel, industry, referenceDate, user);
+
+      // Compute actual billable rate from current daily data
+      let currentDailyTx = 0, currentDailyBill = 0;
+      Object.values(data).forEach(chData => {
+        Object.values(chData).forEach(row => {
+          currentDailyTx += row.transactions;
+          currentDailyBill += row.billable;
+        });
+      });
+      const currentBillableRate = currentDailyTx > 0 ? currentDailyBill / currentDailyTx : 0;
+
+      prevData = computePriorData(period, channel, industry, referenceDate, user, currentBillableRate);
 
       const hourlySummary = {};
       DATA.CHANNELS.forEach(ch => {
@@ -1314,10 +1352,10 @@ const CHARTS = (() => {
         const s = hourlySummary[ch];
         s.successRate = s.transactions > 0 ? s.success / s.transactions : 0;
         s.failureRate = s.transactions > 0 ? s.fail / s.transactions : 0;
-        s.billableRate = 0.78;
+        s.billableRate = currentBillableRate;
         s.revenueShare = totalHrRev > 0 ? s.revenue / totalHrRev : 0;
         s.shareOfTotal = totalHrTx > 0 ? s.transactions / totalHrTx : 0;
-        s.billable = Math.round(s.transactions * 0.78);
+        s.billable = Math.round(s.transactions * currentBillableRate);
       });
 
       summary = hourlySummary;
@@ -1331,6 +1369,7 @@ const CHARTS = (() => {
           if (row.hour === h) {
             hourlyTrend[hourKey].transactions += row.transactions;
             hourlyTrend[hourKey].success += row.success;
+            hourlyTrend[hourKey].fail += row.fail || 0;
             hourlyTrend[hourKey].revenue += row.revenue;
           }
         });
@@ -1422,9 +1461,12 @@ const CHARTS = (() => {
           });
         }
       }
-      // Set final activeUsers for hourly trend to the filtered user count
+      // Set activeUsers for hourly trend proportionally to transaction volume
+      const totalHourlyTx = Object.values(trend).reduce((s, t) => s + t.transactions, 0);
       Object.keys(trend).forEach(date => {
-        trend[date].activeUsers = filteredUserCount;
+        trend[date].activeUsers = totalHourlyTx > 0
+          ? Math.max(1, Math.round(filteredUserCount * (trend[date].transactions / totalHourlyTx)))
+          : 1;
       });
       }
     } else {
@@ -1471,14 +1513,14 @@ const CHARTS = (() => {
     renderTopUsersTable(null, summary, industry, user);
     renderChurnRiskTable(industry, user);
     renderMonoChannelUsers(industry, user);
-    renderChannelStability(summary);
+    renderChannelStability(summary, data);
     renderChurnAlertOverview(industry, user);
     renderChannelUsage('chart-channel-usage', summary);
 
     // WhatsApp read rate (only when WhatsApp is active)
     const chs = Object.keys(summary);
     if (chs.includes('WhatsApp')) {
-      renderWhatsAppReadRate('chart-read-rate', trend);
+      renderWhatsAppReadRate('chart-read-rate', trend, data);
     }
   }
 
