@@ -50,6 +50,18 @@ const CHARTS = (() => {
     }
   }
 
+  // ---- DATA INTEGRITY ----
+  function enforceCallSMSIntegrity(ch, obj) {
+    if ((ch === 'Call' || ch === 'SMS') && obj.transactions != null) {
+      const tx = obj.transactions;
+      const succ = obj.success || 0;
+      obj.failure = Math.max(0, tx - succ);
+      if (obj.fail != null) obj.fail = obj.failure;
+      if (obj.neutral != null) obj.neutral = 0;
+    }
+    return obj;
+  }
+
   // ---- KPI CARDS ----
   function updateKPIs(data, prevData, summary, trend, activeUserCount, prevActiveUserCount) {
     // Current period
@@ -685,8 +697,6 @@ const CHARTS = (() => {
       return trend[d].transactions > 0 ? trend[d].success / trend[d].transactions : 0;
     });
     const totalDelivered = dates.map(d => waData[d] ? waData[d].success : trend[d].success);
-    const totalRead = dates.map((d, i) => Math.round(totalDelivered[i] * (0.38 + (i % 5) * 0.03)));
-    const readRates = totalDelivered.map((d, i) => d > 0 ? totalRead[i] / d : 0);
 
     chartInstances[canvasId] = new Chart(canvas, {
       type: 'line',
@@ -702,15 +712,6 @@ const CHARTS = (() => {
             data: deliveryRates,
             borderColor: COLORS.success,
             backgroundColor: COLORS.success + '20',
-            fill: true,
-            tension: 0.3,
-            pointRadius: 1
-          },
-          {
-            label: 'Read Rate',
-            data: readRates,
-            borderColor: COLORS.whatsapp,
-            backgroundColor: COLORS.whatsapp + '20',
             fill: true,
             tension: 0.3,
             pointRadius: 1
@@ -1227,6 +1228,7 @@ const CHARTS = (() => {
           prior[ch][prevDate].success = Math.round(prior[ch][prevDate].success * ratio);
           prior[ch][prevDate].failure = Math.round(prior[ch][prevDate].failure * ratio);
           prior[ch][prevDate].revenue = Math.round(prior[ch][prevDate].revenue * ratio);
+          enforceCallSMSIntegrity(ch, prior[ch][prevDate]);
         });
       }
       // Scale prior by user
@@ -1237,6 +1239,7 @@ const CHARTS = (() => {
           prior[ch][prevDate].success = Math.round(prior[ch][prevDate].success * share);
           prior[ch][prevDate].failure = Math.round(prior[ch][prevDate].failure * share);
           prior[ch][prevDate].revenue = Math.round(prior[ch][prevDate].revenue * share);
+          enforceCallSMSIntegrity(ch, prior[ch][prevDate]);
         });
       }
       const billRate = defaultBillableRate || 0.78;
@@ -1343,6 +1346,7 @@ const CHARTS = (() => {
           s.neutral = Math.round(s.neutral * ratio);
           s.revenue = Math.round(s.revenue * ratio);
           s.billable = Math.round(s.billable * ratio);
+          enforceCallSMSIntegrity(ch, s);
         });
       }
 
@@ -1429,6 +1433,7 @@ const CHARTS = (() => {
             e.transactions = Math.round(e.transactions * trendRatio);
             e.success = Math.round(e.success * trendRatio);
             e.failure = Math.round(e.failure * trendRatio);
+            enforceCallSMSIntegrity(ch, e);
           });
         });
       }
@@ -1445,6 +1450,7 @@ const CHARTS = (() => {
             s.neutral = Math.round(s.neutral * share);
             s.revenue = Math.round(s.revenue * share);
             s.billable = Math.round(s.billable * share);
+            enforceCallSMSIntegrity(ch, s);
           });
           Object.keys(trend).forEach(date => {
             const t = trend[date];
@@ -1460,6 +1466,7 @@ const CHARTS = (() => {
               e.transactions = Math.round(e.transactions * share);
               e.success = Math.round(e.success * share);
               e.failure = Math.round(e.failure * share);
+              enforceCallSMSIntegrity(ch, e);
             });
           });
         }
@@ -1495,6 +1502,13 @@ const CHARTS = (() => {
     // Compute active user count based on filters
     let activeUserCount = filteredUserCount;
     let prevActiveUserCount = filteredUserCount;
+    if (prevData && Object.keys(prevData).length > 0) {
+      const prevTrend = DATA.computeDailyTrend(prevData, null, filteredUserCount);
+      if (prevTrend && Object.keys(prevTrend).length > 0) {
+        const totalPrev = Object.values(prevTrend).reduce((s, t) => s + t.activeUsers, 0);
+        prevActiveUserCount = Math.round(totalPrev / Object.keys(prevTrend).length);
+      }
+    }
 
     // Guard: skip rendering if no data
     const hasData = data && Object.keys(data).length > 0 &&

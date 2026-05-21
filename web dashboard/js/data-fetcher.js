@@ -48,6 +48,12 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
   }
 
   function buildDataFromResponse(resp) {
+    const currentYear = new Date().getFullYear().toString();
+    function fixYear(d) {
+      if (!d) return '';
+      return d.replace(/^\d{4}/, currentYear);
+    }
+
     const channels = Object.keys(resp.dailyDataByChannel || {});
     const rawUsers = resp.users || [];
     const users = rawUsers.map(u => ({
@@ -57,7 +63,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
       user_name: u.user_name || u.name || u.id
     }));
     const industries = [...new Set(users.map(u => u.industry).filter(Boolean))].sort();
-    const allDates = resp.allDates || Object.keys(resp.dailyTrend || {}).sort();
+    const allDates = (resp.allDates || Object.keys(resp.dailyTrend || {}).sort()).map(fixYear);
 
     // Build per-user weight map from topUsers revenue data (if available)
     const totalTopRevenue = (resp.topUsers || []).reduce((s, u) => s + (u.total_revenue || 0), 0);
@@ -68,14 +74,22 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
         if (key) userWeightMap[key] = (u.total_revenue || 0) / totalTopRevenue;
       });
     }
-    const dailyByChannel = resp.dailyDataByChannel || {};
+    // Normalize years in dailyByChannel keys
+    const rawDailyByChannel = resp.dailyDataByChannel || {};
+    const dailyByChannel = {};
+    Object.keys(rawDailyByChannel).forEach(ch => {
+      dailyByChannel[ch] = {};
+      Object.entries(rawDailyByChannel[ch]).forEach(([dateStr, row]) => {
+        dailyByChannel[ch][fixYear(dateStr)] = { ...row };
+      });
+    });
     const channelSummary = resp.channelSummary || {};
     const dailyTrend = resp.dailyTrend || {};
 
-    // Helper: format date consistently
+    // Helper: format date consistently (also normalizes year)
     function normDate(d) {
       if (!d) return '';
-      return d.split('T')[0].split(' ')[0];
+      return fixYear(d.split('T')[0].split(' ')[0]);
     }
 
     // Helper: filter dailyDataByChannel by range + channel
@@ -188,6 +202,16 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
       return result;
     }
 
+    // Helper: enforce Call/SMS have zero neutral (failure = tx - success)
+    function enforceCallSMSIntegrity(ch, obj) {
+      if ((ch === 'Call' || ch === 'SMS') && obj.transactions != null) {
+        const tx = obj.transactions;
+        const succ = obj.success || 0;
+        obj.failure = Math.max(0, tx - succ);
+      }
+      return obj;
+    }
+
     // ---- Build new DATA object ----
     const NEW_DATA = {
       CHANNELS: channels,
@@ -216,6 +240,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
                 revenue: Math.round(r.revenue * ratio),
                 billable: Math.round(r.billable * ratio)
               };
+              enforceCallSMSIntegrity(ch, result[ch][date]);
             });
           });
         }
@@ -233,6 +258,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
                   revenue: Math.round(r.revenue * ratio),
                   billable: Math.round(r.billable * ratio)
                 };
+                enforceCallSMSIntegrity(ch, result[ch][date]);
               });
             });
           }
@@ -292,6 +318,20 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
         opt.textContent = ind;
         if (ind === currentVal) opt.selected = true;
         industrySelect.appendChild(opt);
+      });
+    }
+
+    // Rebuild channel filter dropdown with live data channels
+    const channelSelect = document.getElementById('channelFilter');
+    if (channelSelect) {
+      const currentVal = channelSelect.value;
+      channelSelect.innerHTML = '<option value="All">All Channels</option>';
+      channels.forEach(ch => {
+        const opt = document.createElement('option');
+        opt.value = ch;
+        opt.textContent = ch;
+        if (ch === currentVal) opt.selected = true;
+        channelSelect.appendChild(opt);
       });
     }
 
