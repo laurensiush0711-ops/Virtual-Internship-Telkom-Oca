@@ -39,15 +39,20 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
     fetchInProgress = true;
     showLoading(true);
 
-    fetch(APPS_SCRIPT_URL)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    fetch(APPS_SCRIPT_URL, { signal: controller.signal })
       .then(res => res.json())
       .then(json => {
+        clearTimeout(timeout);
         showLoading(false);
         fetchInProgress = false;
         fetchAttempted = true;
         if (json.error) {
           console.warn('[data-fetcher] Apps Script error:', json.error);
           showDataSourceStatus('error', 'Live data error — using demo data');
+          reRender();
           return;
         }
         buildDataFromResponse(json);
@@ -55,10 +60,12 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
         showDataSourceStatus('live', '● Live data connected');
       })
       .catch(err => {
+        clearTimeout(timeout);
         showLoading(false);
         fetchInProgress = false;
         console.warn('[data-fetcher] Fetch failed:', err.message);
         showDataSourceStatus('offline', 'Offline — using demo data');
+        reRender();
       });
   }
 
