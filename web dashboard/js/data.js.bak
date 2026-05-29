@@ -339,10 +339,8 @@ DATA = (() => {
   const initialSummary = computeChannelSummary(initialData);
   const initialTrend = computeDailyTrend(initialData);
 
-  // ---- INACTIVITY COMPUTATION ----
-  // For each user, find the longest consecutive streak of zero-transaction days
-  // within the date range, then return the average across all filtered users.
-  function computeInactivityData(startStr, endStr, channelFilter, industryFilter, userFilter) {
+  // ---- CHURN RISK COMPUTATION ----
+  function computeChurnData(startStr, endStr, channelFilter, industryFilter, userFilter) {
     const start = new Date(startStr);
     const end = new Date(endStr);
     let relevantUsers = users;
@@ -354,20 +352,13 @@ DATA = (() => {
       relevantUsers = relevantUsers.filter(u => u.name === userFilter || u.user_name === userFilter);
     }
 
-    const channelsToCheck = channelFilter && channelFilter !== 'All' ? [channelFilter] : CHANNELS;
-    let totalLongestStreak = 0;
-    let maxInactiveDay = 0;
-    let userCount = 0;
-
+    let atRiskCount = 0;
     relevantUsers.forEach(u => {
-      let longestStreak = 0;
-      let currentStreak = 0;
-
+      let hasActivity = false;
+      const channelsToCheck = channelFilter && channelFilter !== 'All' ? [channelFilter] : CHANNELS;
       const d = new Date(start);
       while (d <= end) {
         const dateStr = formatDate(d);
-        let hasActivity = false;
-
         for (let ci = 0; ci < channelsToCheck.length; ci++) {
           const ch = channelsToCheck[ci];
           if (userData[u.id] && userData[u.id][ch] && userData[u.id][ch][dateStr] && userData[u.id][ch][dateStr].transactions > 0) {
@@ -375,30 +366,15 @@ DATA = (() => {
             break;
           }
         }
-
-        if (hasActivity) {
-          if (currentStreak > longestStreak) longestStreak = currentStreak;
-          currentStreak = 0;
-        } else {
-          currentStreak++;
-        }
-
+        if (hasActivity) break;
         d.setDate(d.getDate() + 1);
       }
-      // Final streak at end of range
-      if (currentStreak > longestStreak) longestStreak = currentStreak;
-
-      totalLongestStreak += longestStreak;
-      if (longestStreak > maxInactiveDay) maxInactiveDay = longestStreak;
-      userCount++;
+      if (!hasActivity) atRiskCount++;
     });
 
-    const avgLongestInactiveDay = userCount > 0 ? Math.round(totalLongestStreak / userCount) : 0;
-
     return {
-      avgLongestInactiveDay,
-      totalUsers: userCount,
-      maxInactiveDay
+      atRiskCount,
+      totalUsers: relevantUsers.length
     };
   }
 
@@ -416,7 +392,7 @@ DATA = (() => {
     getUserShare,
     computeChannelSummary,
     computeDailyTrend,
-    computeInactivityData,
+    computeChurnData,
     initialSummary,
     initialTrend,
     initialData
@@ -437,7 +413,7 @@ DATA = (() => {
     getUserShare: function() { return 0; },
     computeChannelSummary: function() { return {}; },
     computeDailyTrend: function() { return {}; },
-    computeInactivityData: function() { return { avgLongestInactiveDay: 0, totalUsers: 0, maxInactiveDay: 0 }; },
+    computeChurnData: function() { return { atRiskCount: 0, totalUsers: 0 }; },
     initialSummary: {},
     initialTrend: {},
     initialData: {}

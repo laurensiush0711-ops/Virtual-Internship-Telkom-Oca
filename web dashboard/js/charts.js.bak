@@ -63,7 +63,7 @@ const CHARTS = (() => {
   }
 
   // ---- KPI CARDS ----
-  function updateKPIs(data, prevData, summary, trend, activeUserCount, prevActiveUserCount, inactivityData, prevInactivityData) {
+  function updateKPIs(data, prevData, summary, trend, activeUserCount, prevActiveUserCount, churnData, prevChurnData) {
     // Current period
     let totalTx = 0, totalRev = 0, totalSucc = 0, totalFail = 0, totalBill = 0;
     Object.values(data).forEach(chData => {
@@ -80,8 +80,10 @@ const CHARTS = (() => {
     const successRate = totalTx > 0 ? totalSucc / totalTx : 0;
     const billableRate = totalTx > 0 ? totalBill / totalTx : 0;
 
-    // Inactivity: average longest inactive day
-    const avgLongestInactiveDay = inactivityData ? inactivityData.avgLongestInactiveDay : 0;
+    // Churn rate: at-risk users / total users
+    const atRiskUsers = churnData ? churnData.atRiskCount : 0;
+    const totalFilteredUsers = churnData ? churnData.totalUsers : (DATA.users ? DATA.users.length : 20);
+    const churnRate = totalFilteredUsers > 0 ? atRiskUsers / totalFilteredUsers : 0;
 
     // Previous period
     let prevTx = 0, prevRev = 0, prevSucc = 0, prevFail = 0, prevBill = 0;
@@ -100,7 +102,9 @@ const CHARTS = (() => {
     const prevActiveUsers = prevActiveUserCount != null ? prevActiveUserCount : 20;
     const prevSuccessRate = prevTx > 0 ? prevSucc / prevTx : 0;
     const prevBillableRate = prevTx > 0 ? prevBill / prevTx : 0;
-    const prevAvgLongestInactiveDay = prevInactivityData ? prevInactivityData.avgLongestInactiveDay : null;
+    const prevChurnRate = prevChurnData && prevChurnData.totalUsers > 0
+      ? prevChurnData.atRiskCount / prevChurnData.totalUsers
+      : null;
 
     // Helper: update a delta element
     // For "inverted" metrics (failure rate), a decrease is good (green up)
@@ -144,7 +148,7 @@ const CHARTS = (() => {
     successRateEl.textContent = formatPct(successRate);
     successRateEl.className = 'kpi-value';
 
-    document.getElementById('kpi-churn-rate').textContent = avgLongestInactiveDay + 'd';
+    document.getElementById('kpi-churn-rate').textContent = formatPct(churnRate);
     document.getElementById('kpi-revenue').textContent = formatIDR(totalRev);
     document.getElementById('kpi-billable-rate').textContent = formatPct(billableRate);
 
@@ -152,7 +156,7 @@ const CHARTS = (() => {
     setDelta('delta-total-tx', totalTx, prevTx);
     setDelta('delta-active-users', activeUsers, prevActiveUsers);
     setDelta('delta-success-rate', successRate, prevSuccessRate);
-    setDelta('delta-churn-rate', avgLongestInactiveDay, prevAvgLongestInactiveDay, true);
+    setDelta('delta-churn-rate', churnRate, prevChurnRate, true);
     setDelta('delta-revenue', totalRev, prevRev);
     setDelta('delta-billable-rate', billableRate, prevBillableRate);
   }
@@ -329,10 +333,7 @@ const CHARTS = (() => {
             ticks: { callback: v => formatNum(v) }
           },
           x: {
-            ticks: {
-              maxTicksLimit: dates.length <= 7 ? 7 : dates.length <= 30 ? 10 : 12,
-              maxRotation: 45
-            }
+            ticks: { maxTicksLimit: 10, maxRotation: 45 }
           }
         }
       }
@@ -419,10 +420,7 @@ const CHARTS = (() => {
             ticks: { callback: v => formatIDR(v) }
           },
           x: {
-            ticks: {
-              maxTicksLimit: dates.length <= 7 ? 7 : dates.length <= 30 ? 10 : 12,
-              maxRotation: 45
-            }
+            ticks: { maxTicksLimit: 10, maxRotation: 45 }
           }
         }
       }
@@ -542,19 +540,33 @@ const CHARTS = (() => {
     });
   }
 
-  // ---- SHARED INACTIVITY HELPER ----
-  function getInactiveUsers(industryFilter, userFilter) {
-    // Simulate inactivity data from dummy user list
+  // ---- SHARED CHURN HELPER ----
+  function getChurnUsers(industryFilter, userFilter) {
+    if (DATA.churnRisk && DATA.churnRisk.length) {
+      return DATA.churnRisk
+        .filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
+                     (userFilter === 'All' || u.user_name === userFilter))
+        .map(u => ({
+          name: u.user_name,
+          industry: u.industry,
+          daysInactive: u.days_inactive,
+          riskScore: u.risk_score,
+          revenue: u.total_revenue
+        }))
+        .sort((a, b) => b.riskScore - a.riskScore);
+    }
+    // Fallback: simulate churn data
     return DATA.users
       .filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
                    (userFilter === 'All' || u.name === userFilter || u.user_name === userFilter))
       .map((u, i) => {
         const seed = u.id ? u.id.charCodeAt(u.id.length - 1) : (i * 7 + 13);
-        const longestInactive = 3 + (seed % 28);
-        return { name: u.user_name || u.name, industry: u.industry, longestInactive };
+        const daysInactive = 2 + (seed % 25);
+        const riskScore = Math.min(95, 20 + daysInactive * 2 + (seed % 15));
+        return { name: u.user_name || u.name, industry: u.industry, riskScore, daysInactive };
       })
-      .filter(u => u.longestInactive >= 3)
-      .sort((a, b) => b.longestInactive - a.longestInactive);
+      .filter(u => u.riskScore > 40)
+      .sort((a, b) => b.riskScore - a.riskScore);
   }
 
   // ---- TOP REVENUE USERS TABLE ----
@@ -628,15 +640,15 @@ const CHARTS = (() => {
     container.innerHTML = html;
   }
 
-  // ---- INACTIVITY RISK TABLE ----
-  function renderInactivityRiskTable(industryFilter, userFilter) {
+  // ---- CHURN RISK TABLE ----
+  function renderChurnRiskTable(industryFilter, userFilter) {
     const container = document.getElementById('churn-risk-table');
     if (!container) return;
 
-    const inactiveUsers = getInactiveUsers(industryFilter, userFilter);
+    const churnUsers = getChurnUsers(industryFilter, userFilter);
 
-    if (!inactiveUsers.length) {
-      container.innerHTML = '<div class="text-muted" style="padding: 20px; text-align: center;">No users with inactivity match current filters</div>';
+    if (!churnUsers.length) {
+      container.innerHTML = '<div class="text-muted" style="padding: 20px; text-align: center;">No at-risk users match current filters</div>';
       return;
     }
 
@@ -646,30 +658,23 @@ const CHARTS = (() => {
           <tr>
             <th>User</th>
             <th>Industry</th>
-            <th>Longest Inactive (days)</th>
+            <th>Days Inactive</th>
+            <th>Risk Score</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody>
     `;
 
-    inactiveUsers.forEach(u => {
-      let status, statusClass;
-      if (u.longestInactive >= 14) {
-        status = 'Critical';
-        statusClass = 'critical';
-      } else if (u.longestInactive >= 7) {
-        status = 'Warning';
-        statusClass = 'warning';
-      } else {
-        status = 'Monitor';
-        statusClass = 'monitor';
-      }
+    churnUsers.forEach(u => {
+      const status = u.riskScore >= 70 ? 'Critical' : u.riskScore >= 50 ? 'Warning' : 'Monitor';
+      const statusClass = status.toLowerCase();
       html += `
         <tr>
           <td>${u.name}</td>
           <td>${u.industry}</td>
-          <td>${u.longestInactive}</td>
+          <td>${u.daysInactive}</td>
+          <td>${u.riskScore}</td>
           <td><span class="badge badge-${statusClass}">${status}</span></td>
         </tr>
       `;
@@ -823,7 +828,7 @@ const CHARTS = (() => {
           },
           x: {
             ticks: {
-              maxTicksLimit: isHourly ? dates.length : (dates.length <= 7 ? 7 : dates.length <= 30 ? 10 : 12),
+              maxTicksLimit: isHourly ? dates.length : 10,
               maxRotation: isHourly ? 0 : 45
             }
           }
@@ -1081,32 +1086,23 @@ const CHARTS = (() => {
     container.innerHTML = html;
   }
 
-  // ---- INACTIVITY ALERT OVERVIEW (compact, top 5) ----
-  function renderInactivityAlertOverview(industryFilter, userFilter) {
+  // ---- CHURN ALERT OVERVIEW (compact, top 5) ----
+  function renderChurnAlertOverview(industryFilter, userFilter) {
     const container = document.getElementById('churn-alert-overview');
     if (!container) return;
 
-    const inactiveUsers = getInactiveUsers(industryFilter, userFilter);
-    const top5 = inactiveUsers.slice(0, 5);
+    const churnUsers = getChurnUsers(industryFilter, userFilter);
+    const top5 = churnUsers.slice(0, 5);
 
     if (!top5.length) {
-      container.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center;font-size:13px;">No users with inactivity match filters</div>';
+      container.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center;font-size:13px;">No at-risk users match filters</div>';
       return;
     }
 
     let html = '';
     top5.forEach(u => {
-      let status, statusClass;
-      if (u.longestInactive >= 14) {
-        status = 'Critical';
-        statusClass = 'critical';
-      } else if (u.longestInactive >= 7) {
-        status = 'Warning';
-        statusClass = 'warning';
-      } else {
-        status = 'Monitor';
-        statusClass = 'monitor';
-      }
+      const status = u.riskScore >= 70 ? 'Critical' : u.riskScore >= 50 ? 'Warning' : 'Monitor';
+      const statusClass = status.toLowerCase();
       html += `
         <div class="churn-item">
           <div class="churn-item-top">
@@ -1114,7 +1110,8 @@ const CHARTS = (() => {
             <span class="churn-name">${u.name}</span>
           </div>
           <div class="churn-item-bottom">
-            <span class="churn-meta">${u.longestInactive}d inactive</span>
+            <span class="churn-meta">${u.daysInactive}d inactive</span>
+            <span class="churn-score">Risk: ${u.riskScore}</span>
           </div>
         </div>
       `;
@@ -1501,10 +1498,10 @@ const CHARTS = (() => {
       }
     }
 
-    // Compute inactivity data for current and previous periods
-    let inactivityData = null;
-    let prevInactivityData = null;
-    if (DATA.computeInactivityData) {
+    // Compute churn data for current and previous periods
+    let churnData = null;
+    let prevChurnData = null;
+    if (DATA.computeChurnData) {
       let curStart, curEnd;
       if (isHourly) {
         curStart = latestDate;
@@ -1520,16 +1517,16 @@ const CHARTS = (() => {
         curStart = startDate.toISOString().split('T')[0];
         curEnd = endDate.toISOString().split('T')[0];
       }
-      inactivityData = DATA.computeInactivityData(curStart, curEnd, channel, industry, user);
+      churnData = DATA.computeChurnData(curStart, curEnd, channel, industry, user);
 
-      // Previous period inactivity
+      // Previous period churn
       if (period !== 'all') {
         const isHr = ['1h', '4h', '6h', '12h', '24h'].includes(period);
         if (isHr) {
           const prevRefIdx = DATA.allDates.indexOf(referenceDate);
           const prevDateIdx = prevRefIdx > 0 ? prevRefIdx - 1 : Math.max(0, DATA.allDates.length - 2);
           const prevDate = DATA.allDates[prevDateIdx] || DATA.allDates[0];
-          prevInactivityData = DATA.computeInactivityData(prevDate, prevDate, channel, industry, user);
+          prevChurnData = DATA.computeChurnData(prevDate, prevDate, channel, industry, user);
         } else {
           const days = period === '7d' ? 7 : 30;
           const endDate = new Date(referenceDate);
@@ -1539,7 +1536,7 @@ const CHARTS = (() => {
           prevEndDate.setDate(prevEndDate.getDate() - 1);
           const prevStartDate = new Date(prevEndDate);
           prevStartDate.setDate(prevStartDate.getDate() - days + 1);
-          prevInactivityData = DATA.computeInactivityData(
+          prevChurnData = DATA.computeChurnData(
             prevStartDate.toISOString().split('T')[0],
             prevEndDate.toISOString().split('T')[0],
             channel, industry, user
@@ -1553,12 +1550,12 @@ const CHARTS = (() => {
                     Object.values(data).some(chData =>
                       Object.values(chData).some(r => r.transactions > 0));
     if (!hasData) {
-      updateKPIs(data || {}, prevData || {}, summary || {}, trend || {}, activeUserCount || 0, prevActiveUserCount || 0, inactivityData, prevInactivityData);
+      updateKPIs(data || {}, prevData || {}, summary || {}, trend || {}, activeUserCount || 0, prevActiveUserCount || 0, churnData, prevChurnData);
       return;
     }
 
     // Render everything
-    updateKPIs(data, prevData, summary, trend, activeUserCount, prevActiveUserCount, inactivityData, prevInactivityData);
+    updateKPIs(data, prevData, summary, trend, activeUserCount, prevActiveUserCount, churnData, prevChurnData);
     renderChannelVolume('chart-channel-volume', summary);
     renderRevenueDonut('chart-revenue-donut', summary);
     renderCombinedTrend('chart-combined-trend', trend);
@@ -1566,10 +1563,10 @@ const CHARTS = (() => {
     renderSuccessRateByChannel('chart-success-rate', summary);
     renderStatusDistribution('chart-status-dist', summary);
     renderTopUsersTable(null, summary, industry, user);
-    renderInactivityRiskTable(industry, user);
+    renderChurnRiskTable(industry, user);
     renderMonoChannelUsers(industry, user);
     renderChannelStability(summary, data);
-    renderInactivityAlertOverview(industry, user);
+    renderChurnAlertOverview(industry, user);
     renderChannelUsage('chart-channel-usage', summary);
 
     // WhatsApp read rate (only when WhatsApp is active)

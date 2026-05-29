@@ -95,10 +95,10 @@
         </div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Avg Longest Inactive Day</div>
+        <div class="kpi-label">Churn Rate</div>
         <div class="kpi-value" id="kpi-churn-rate">--</div>
         <div class="kpi-sub">
-          Avg longest period without activity
+          Users at risk
           <span class="kpi-delta" id="delta-churn-rate"></span>
         </div>
       </div>
@@ -139,9 +139,9 @@
     <div class="section-label">User Activity</div>
     <div class="chart-grid chart-grid-3">
       <div class="chart-card">
-        <div class="chart-title">Inactivity Alert</div>
+        <div class="chart-title">Churn Alert</div>
         <div class="chart-wrapper" id="churn-alert-overview">
-          <div class="text-muted" style="padding:10px">Loading inactivity data...</div>
+          <div class="text-muted" style="padding:10px">Loading churn data...</div>
         </div>
       </div>
       <div class="chart-card">
@@ -200,10 +200,10 @@
       </div>
     </div>
 
-    <div class="section-label">Inactivity Risk</div>
+    <div class="section-label">Churn Risk</div>
     <div class="chart-grid">
       <div class="chart-card full-width" id="churn-risk-table">
-        <div class="chart-title">Users with Longest Inactivity</div>
+        <div class="chart-title">At-Risk Users</div>
         <div class="text-muted mb-16">Loading table data...</div>
       </div>
     </div>

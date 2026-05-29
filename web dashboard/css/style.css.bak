@@ -575,7 +575,7 @@ body {
   font-size: 13px;
 }
 
-/* ---- INACTIVITY ALERT COMPACT ---- */
+/* ---- CHURN ALERT COMPACT ---- */
 #churn-alert-overview {
   height: auto;
   min-height: 200px;
@@ -611,6 +611,9 @@ body {
   font-size: 11px;
   color: var(--text-muted);
   padding-left: 4px;
+}
+.churn-score {
+  font-weight: 600;
 }
 
 /* ---- FOOTER ---- */
