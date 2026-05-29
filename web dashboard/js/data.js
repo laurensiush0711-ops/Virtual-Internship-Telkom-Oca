@@ -340,8 +340,8 @@ DATA = (() => {
   const initialTrend = computeDailyTrend(initialData);
 
   // ---- INACTIVITY COMPUTATION ----
-  // For each user, find the longest consecutive streak of zero-transaction days
-  // within the date range, then return the average across all filtered users.
+  // For each user, find the average interval (gap in days) between active days,
+  // then average across all filtered users.
   function computeInactivityData(startStr, endStr, channelFilter, industryFilter, userFilter) {
     const start = new Date(startStr);
     const end = new Date(endStr);
@@ -355,14 +355,13 @@ DATA = (() => {
     }
 
     const channelsToCheck = channelFilter && channelFilter !== 'All' ? [channelFilter] : CHANNELS;
-    let totalLongestStreak = 0;
+    let totalAvgInterval = 0;
     let maxInactiveDay = 0;
     let userCount = 0;
 
     relevantUsers.forEach(u => {
-      let longestStreak = 0;
-      let currentStreak = 0;
-
+      // Collect all dates where user had any transaction
+      const activeDates = [];
       const d = new Date(start);
       while (d <= end) {
         const dateStr = formatDate(d);
@@ -377,26 +376,46 @@ DATA = (() => {
         }
 
         if (hasActivity) {
-          if (currentStreak > longestStreak) longestStreak = currentStreak;
-          currentStreak = 0;
-        } else {
-          currentStreak++;
+          activeDates.push(new Date(d));
         }
-
         d.setDate(d.getDate() + 1);
       }
-      // Final streak at end of range
-      if (currentStreak > longestStreak) longestStreak = currentStreak;
 
-      totalLongestStreak += longestStreak;
-      if (longestStreak > maxInactiveDay) maxInactiveDay = longestStreak;
-      userCount++;
+      // Calculate gaps between consecutive active days
+      if (activeDates.length >= 2) {
+        let totalGap = 0;
+        let gapCount = 0;
+        let maxGap = 0;
+
+        for (let i = 1; i < activeDates.length; i++) {
+          const diffTime = activeDates[i].getTime() - activeDates[i - 1].getTime();
+          const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+          totalGap += diffDays;
+          gapCount++;
+          if (diffDays > maxGap) maxGap = diffDays;
+        }
+
+        const avgGap = gapCount > 0 ? totalGap / gapCount : 0;
+        totalAvgInterval += avgGap;
+        if (maxGap > maxInactiveDay) maxInactiveDay = maxGap;
+        userCount++;
+      } else if (activeDates.length === 1) {
+        // User was active only once — gap from start to that date or that date to end
+        const activeDate = activeDates[0];
+        const diffFromStart = Math.round((activeDate - start) / (1000 * 60 * 60 * 24));
+        const diffToEnd = Math.round((end - activeDate) / (1000 * 60 * 60 * 24));
+        const singleGap = Math.max(diffFromStart, diffToEnd);
+        totalAvgInterval += singleGap;
+        if (singleGap > maxInactiveDay) maxInactiveDay = singleGap;
+        userCount++;
+      }
+      // If user has 0 active days, skip (no interval to compute)
     });
 
-    const avgLongestInactiveDay = userCount > 0 ? Math.round(totalLongestStreak / userCount) : 0;
+    const avgInactiveInterval = userCount > 0 ? Math.round(totalAvgInterval / userCount) : 0;
 
     return {
-      avgLongestInactiveDay,
+      avgInactiveInterval,
       totalUsers: userCount,
       maxInactiveDay
     };
@@ -437,7 +456,7 @@ DATA = (() => {
     getUserShare: function() { return 0; },
     computeChannelSummary: function() { return {}; },
     computeDailyTrend: function() { return {}; },
-    computeInactivityData: function() { return { avgLongestInactiveDay: 0, totalUsers: 0, maxInactiveDay: 0 }; },
+    computeInactivityData: function() { return { avgInactiveInterval: 0, totalUsers: 0, maxInactiveDay: 0 }; },
     initialSummary: {},
     initialTrend: {},
     initialData: {}

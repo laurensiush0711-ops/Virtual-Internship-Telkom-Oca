@@ -80,8 +80,8 @@ const CHARTS = (() => {
     const successRate = totalTx > 0 ? totalSucc / totalTx : 0;
     const billableRate = totalTx > 0 ? totalBill / totalTx : 0;
 
-    // Inactivity: average longest inactive day
-    const avgLongestInactiveDay = inactivityData ? inactivityData.avgLongestInactiveDay : 0;
+    // Inactivity: average interval of inactivity
+    const avgInactiveInterval = inactivityData ? inactivityData.avgInactiveInterval : 0;
 
     // Previous period
     let prevTx = 0, prevRev = 0, prevSucc = 0, prevFail = 0, prevBill = 0;
@@ -100,7 +100,7 @@ const CHARTS = (() => {
     const prevActiveUsers = prevActiveUserCount != null ? prevActiveUserCount : 20;
     const prevSuccessRate = prevTx > 0 ? prevSucc / prevTx : 0;
     const prevBillableRate = prevTx > 0 ? prevBill / prevTx : 0;
-    const prevAvgLongestInactiveDay = prevInactivityData ? prevInactivityData.avgLongestInactiveDay : null;
+    const prevAvgInactiveInterval = prevInactivityData ? prevInactivityData.avgInactiveInterval : null;
 
     // Helper: update a delta element
     // For "inverted" metrics (failure rate), a decrease is good (green up)
@@ -144,7 +144,7 @@ const CHARTS = (() => {
     successRateEl.textContent = formatPct(successRate);
     successRateEl.className = 'kpi-value';
 
-    document.getElementById('kpi-churn-rate').textContent = avgLongestInactiveDay + 'd';
+    document.getElementById('kpi-churn-rate').textContent = avgInactiveInterval + 'd';
     document.getElementById('kpi-revenue').textContent = formatIDR(totalRev);
     document.getElementById('kpi-billable-rate').textContent = formatPct(billableRate);
 
@@ -152,7 +152,7 @@ const CHARTS = (() => {
     setDelta('delta-total-tx', totalTx, prevTx);
     setDelta('delta-active-users', activeUsers, prevActiveUsers);
     setDelta('delta-success-rate', successRate, prevSuccessRate);
-    setDelta('delta-churn-rate', avgLongestInactiveDay, prevAvgLongestInactiveDay, true);
+    setDelta('delta-churn-rate', avgInactiveInterval, prevAvgInactiveInterval, true);
     setDelta('delta-revenue', totalRev, prevRev);
     setDelta('delta-billable-rate', billableRate, prevBillableRate);
   }
@@ -550,11 +550,11 @@ const CHARTS = (() => {
                    (userFilter === 'All' || u.name === userFilter || u.user_name === userFilter))
       .map((u, i) => {
         const seed = u.id ? u.id.charCodeAt(u.id.length - 1) : (i * 7 + 13);
-        const longestInactive = 3 + (seed % 28);
-        return { name: u.user_name || u.name, industry: u.industry, longestInactive };
+        const avgInterval = 3 + (seed % 22);
+        return { name: u.user_name || u.name, industry: u.industry, avgInterval };
       })
-      .filter(u => u.longestInactive >= 3)
-      .sort((a, b) => b.longestInactive - a.longestInactive);
+      .filter(u => u.avgInterval >= 3)
+      .sort((a, b) => b.avgInterval - a.avgInterval);
   }
 
   // ---- TOP REVENUE USERS TABLE ----
@@ -646,7 +646,7 @@ const CHARTS = (() => {
           <tr>
             <th>User</th>
             <th>Industry</th>
-            <th>Longest Inactive (days)</th>
+            <th>Avg Inactive Interval (days)</th>
             <th>Status</th>
           </tr>
         </thead>
@@ -655,10 +655,10 @@ const CHARTS = (() => {
 
     inactiveUsers.forEach(u => {
       let status, statusClass;
-      if (u.longestInactive >= 14) {
+      if (u.avgInterval >= 14) {
         status = 'Critical';
         statusClass = 'critical';
-      } else if (u.longestInactive >= 7) {
+      } else if (u.avgInterval >= 7) {
         status = 'Warning';
         statusClass = 'warning';
       } else {
@@ -669,7 +669,7 @@ const CHARTS = (() => {
         <tr>
           <td>${u.name}</td>
           <td>${u.industry}</td>
-          <td>${u.longestInactive}</td>
+          <td>${u.avgInterval}</td>
           <td><span class="badge badge-${statusClass}">${status}</span></td>
         </tr>
       `;
@@ -741,26 +741,80 @@ const CHARTS = (() => {
   }
 
   // ---- COMBINED TRANSACTION + REVENUE TREND (dual-axis) ----
-  function renderCombinedTrend(canvasId, trend) {
+  function renderCombinedTrend(canvasId, trend, period) {
     destroyChart(canvasId);
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
-    const dates = Object.keys(trend).sort();
+    const isHourly = period && ['1h', '4h', '6h', '12h', '24h'].includes(period);
+
+    let dates = Object.keys(trend).sort();
     if (!dates.length) {
       const parent = canvas.parentElement;
       if (parent) parent.innerHTML = '<div class="empty-chart">No data matches current filters</div>';
       return;
     }
 
-    const isHourly = dates[0] && dates[0].includes('T');
-    const labels = dates.map(d => {
-      if (isHourly) return d.split('T')[1].slice(0, 5);
-      const p = d.split('-');
-      return p[1] + '/' + p[2];
-    });
-    const dailyTx = dates.map(d => trend[d].transactions);
-    const dailyRev = dates.map(d => trend[d].revenue);
+    // Aggregate data for longer periods to reduce bar crowding
+    let labels, txData, revData;
+
+    if (isHourly) {
+      // Hourly: show all data points
+      labels = dates.map(d => d.split('T')[1].slice(0, 5));
+      txData = dates.map(d => trend[d].transactions);
+      revData = dates.map(d => trend[d].revenue);
+    } else if (dates.length <= 7) {
+      // 7 days or fewer: show all
+      labels = dates.map(d => { const p = d.split('-'); return p[1] + '/' + p[2]; });
+      txData = dates.map(d => trend[d].transactions);
+      revData = dates.map(d => trend[d].revenue);
+    } else if (dates.length <= 30) {
+      // 30d: aggregate every 4 days
+      const groupSize = 4;
+      labels = [];
+      txData = [];
+      revData = [];
+      for (let i = 0; i < dates.length; i += groupSize) {
+        const chunk = dates.slice(i, i + groupSize);
+        const startLabel = chunk[0].split('-');
+        const endLabel = chunk[chunk.length - 1].split('-');
+        if (chunk.length === 1) {
+          labels.push(startLabel[1] + '/' + startLabel[2]);
+        } else {
+          labels.push(startLabel[1] + '/' + startLabel[2] + '-' + endLabel[1] + '/' + endLabel[2]);
+        }
+        let chunkTx = 0, chunkRev = 0;
+        chunk.forEach(d => {
+          chunkTx += trend[d].transactions;
+          chunkRev += trend[d].revenue;
+        });
+        txData.push(Math.round(chunkTx / chunk.length));
+        revData.push(Math.round(chunkRev / chunk.length));
+      }
+    } else {
+      // "all" or 92 days: aggregate weekly (every 7 days)
+      const groupSize = 7;
+      labels = [];
+      txData = [];
+      revData = [];
+      for (let i = 0; i < dates.length; i += groupSize) {
+        const chunk = dates.slice(i, i + groupSize);
+        const startLabel = chunk[0].split('-');
+        const endLabel = chunk[chunk.length - 1].split('-');
+        if (chunk.length === 1) {
+          labels.push(startLabel[1] + '/' + startLabel[2]);
+        } else {
+          labels.push(startLabel[1] + '/' + startLabel[2] + '-' + endLabel[1] + '/' + endLabel[2]);
+        }
+        let chunkTx = 0, chunkRev = 0;
+        chunk.forEach(d => {
+          chunkTx += trend[d].transactions;
+          chunkRev += trend[d].revenue;
+        });
+        txData.push(Math.round(chunkTx / chunk.length));
+        revData.push(Math.round(chunkRev / chunk.length));
+      }
+    }
 
     chartInstances[canvasId] = new Chart(canvas, {
       type: 'bar',
@@ -770,7 +824,7 @@ const CHARTS = (() => {
           {
             label: 'Transactions',
             type: 'bar',
-            data: dailyTx,
+            data: txData,
             backgroundColor: COLORS.primary + '80',
             borderColor: COLORS.primary,
             borderWidth: 1,
@@ -782,7 +836,7 @@ const CHARTS = (() => {
           {
             label: 'Revenue',
             type: 'line',
-            data: dailyRev,
+            data: revData,
             borderColor: COLORS.revenue,
             backgroundColor: COLORS.revenue + '20',
             fill: true,
@@ -823,7 +877,6 @@ const CHARTS = (() => {
           },
           x: {
             ticks: {
-              maxTicksLimit: isHourly ? dates.length : (dates.length <= 7 ? 7 : dates.length <= 30 ? 10 : 12),
               maxRotation: isHourly ? 0 : 45
             }
           }
@@ -1097,10 +1150,10 @@ const CHARTS = (() => {
     let html = '';
     top5.forEach(u => {
       let status, statusClass;
-      if (u.longestInactive >= 14) {
+      if (u.avgInterval >= 14) {
         status = 'Critical';
         statusClass = 'critical';
-      } else if (u.longestInactive >= 7) {
+      } else if (u.avgInterval >= 7) {
         status = 'Warning';
         statusClass = 'warning';
       } else {
@@ -1114,7 +1167,7 @@ const CHARTS = (() => {
             <span class="churn-name">${u.name}</span>
           </div>
           <div class="churn-item-bottom">
-            <span class="churn-meta">${u.longestInactive}d inactive</span>
+            <span class="churn-meta">Avg ${u.avgInterval}d interval</span>
           </div>
         </div>
       `;
@@ -1561,7 +1614,7 @@ const CHARTS = (() => {
     updateKPIs(data, prevData, summary, trend, activeUserCount, prevActiveUserCount, inactivityData, prevInactivityData);
     renderChannelVolume('chart-channel-volume', summary);
     renderRevenueDonut('chart-revenue-donut', summary);
-    renderCombinedTrend('chart-combined-trend', trend);
+    renderCombinedTrend('chart-combined-trend', trend, period);
     renderSuccessRateTrend('chart-success-rate-trend', isHourly && hourlyDataByChannel ? hourlyDataByChannel : data);
     renderSuccessRateByChannel('chart-success-rate', summary);
     renderStatusDistribution('chart-status-dist', summary);
