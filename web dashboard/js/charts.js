@@ -941,6 +941,12 @@ const CHARTS = (() => {
             borderRadius: 4
           },
           {
+            label: 'Failure',
+            data: aggregated.map(a => a.failureRate),
+            backgroundColor: COLORS.failure,
+            borderRadius: 4
+          },
+          {
             label: 'Other / Processing',
             data: aggregated.map(a => {
               const neutral = a.totalTransactions - a.totalSuccess - a.totalFailure;
