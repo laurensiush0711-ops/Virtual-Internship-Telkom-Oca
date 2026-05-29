@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ---- RENDER ON CHANGE ----
   function updateDashboard() {
-    CHARTS.renderAll(state.period, state.industry, state.channel, state.referenceDate, state.user);
+    CHARTS.renderAll(state.period, state.industry, state.channel, dateFilter.value || state.referenceDate, state.user);
     activePeriod.textContent = periodFilter.options[periodFilter.selectedIndex].text;
     activeIndustry.textContent = state.industry === 'All' ? 'All Industries' : state.industry;
     activeChannel.textContent = state.channel === 'All' ? 'All Channels' : state.channel;
