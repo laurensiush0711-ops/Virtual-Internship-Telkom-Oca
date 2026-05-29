@@ -1306,7 +1306,7 @@ const CHARTS = (() => {
     referenceDate = referenceDate || new Date().toISOString().split('T')[0];
     const isHourly = ['1h', '4h', '6h', '12h', '24h'].includes(period);
 
-    let data, prevData, summary, trend;
+    let data, prevData, summary, trend, hourlyDataByChannel;
 
     // Compute filtered user count before data fetching (needed by both hourly and daily paths)
     let filteredUserCount;
@@ -1332,6 +1332,7 @@ const CHARTS = (() => {
 
       // Fallback to daily if hourly data is missing (e.g. live data without hourly)
       if (!DATA.hourlyData || !DATA.hourlyData.length) {
+        hourlyDataByChannel = null;
         const startStr = latestDate;
         const endStr = latestDate;
         data = DATA.getDailyDataForRange(startStr, endStr, channel, industry, user);
@@ -1451,7 +1452,7 @@ const CHARTS = (() => {
       trend = hourlyTrend;
 
       // Build hourly per-channel data for success rate trend
-      const hourlyDataByChannel = {};
+      hourlyDataByChannel = {};
       DATA.CHANNELS.forEach(ch => {
         if (channel !== 'All' && ch !== channel) return;
         hourlyDataByChannel[ch] = {};
