@@ -26,6 +26,14 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
     if (overlay) overlay.style.display = on ? 'flex' : 'none';
   }
 
+  function showDataSourceStatus(status, message) {
+    const el = document.getElementById('data-source-status');
+    if (!el) return;
+    el.style.display = 'inline';
+    el.className = 'data-source-status ' + status;
+    el.textContent = message;
+  }
+
   function loadRealData() {
     if (fetchInProgress) return;
     fetchInProgress = true;
@@ -39,15 +47,18 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
         fetchAttempted = true;
         if (json.error) {
           console.warn('[data-fetcher] Apps Script error:', json.error);
+          showDataSourceStatus('error', 'Live data error — using demo data');
           return;
         }
         buildDataFromResponse(json);
         reRender();
+        showDataSourceStatus('live', '● Live data connected');
       })
       .catch(err => {
         showLoading(false);
         fetchInProgress = false;
         console.warn('[data-fetcher] Fetch failed:', err.message);
+        showDataSourceStatus('offline', 'Offline — using demo data');
       });
   }
 
@@ -117,7 +128,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
             result[ch][d] = {
               transactions: row.transactions || 0,
               success: row.success || 0,
-              failure: row.fail || 0,
+              failure: row.failure || 0,
               revenue: row.revenue || 0,
               billable: row.billable || 0
             };
@@ -141,7 +152,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
           bill += row.billable;
         });
         summary[ch] = {
-          transactions: tx, success: succ, fail: fail,
+          transactions: tx, success: succ, failure: fail,
           neutral: tx - succ - fail,
           revenue: rev, billable: bill,
           successRate: tx > 0 ? succ / tx : 0,
@@ -164,10 +175,10 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
       const trend = {};
       Object.values(data).forEach(chDays => {
         Object.entries(chDays).forEach(([date, row]) => {
-          if (!trend[date]) trend[date] = { transactions:0, success:0, fail:0, revenue:0, activeUsers:0 };
+          if (!trend[date]) trend[date] = { transactions:0, success:0, failure:0, revenue:0, activeUsers:0 };
           trend[date].transactions += row.transactions;
           trend[date].success += row.success;
-          trend[date].fail += row.failure;
+          trend[date].failure += row.failure;
           trend[date].revenue += row.revenue;
         });
       });
@@ -203,12 +214,12 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
         for (let h = 0; h < 24; h++) {
           const tx = Math.round(avgDaily * pattern[h]);
           const success = Math.round(tx * successRate);
-          const fail = (ch === 'Call' || ch === 'SMS')
+          const failure = (ch === 'Call' || ch === 'SMS')
             ? Math.max(0, tx - success)
             : Math.round(tx * (1 - successRate) * 0.85);
-          const neutral = tx - success - fail;
+          const neutral = tx - success - failure;
           const revenue = Math.round(avgRevenue * pattern[h]);
-          result.push({ hour: h, channel: ch, transactions: tx, success, fail, neutral, revenue });
+          result.push({ hour: h, channel: ch, transactions: tx, success, failure, neutral, revenue });
         }
       });
       return result;
@@ -303,22 +314,45 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
         }
 
         const channelsToCheck = channelFilter && channelFilter !== 'All' ? [channelFilter] : channels;
+
+        // Simple deterministic hash for simulating per-user daily activity
+        function simpleHash(str) {
+          let hash = 0;
+          for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash |= 0;
+          }
+          return Math.abs(hash) / 2147483647;
+        }
+
+        // Check if a channel has aggregate activity on a given date
+        function channelHasActivity(ch, dateStr) {
+          if (dailyByChannel[ch] && dailyByChannel[ch][dateStr]) {
+            return dailyByChannel[ch][dateStr].transactions > 0;
+          }
+          return false;
+        }
+
         let totalAvgInterval = 0;
         let maxInactiveDay = 0;
         let userCount = 0;
 
         relevantUsers.forEach(u => {
+          const userWeight = userWeightMap[u.user_name] || (1 / Math.max(users.length, 1));
           const activeDates = [];
           const d = new Date(start);
           while (d <= end) {
             const dateStr = d.toISOString().split('T')[0];
-            let hasActivity = false;
 
+            // Simulate per-user activity: user is active if:
+            // 1. At least one channel has aggregate activity on this date, AND
+            // 2. A deterministic hash (userId + date) falls within user's weight probability
+            let hasActivity = false;
             for (let ci = 0; ci < channelsToCheck.length; ci++) {
               const ch = channelsToCheck[ci];
-              if (dailyByChannel[ch] && dailyByChannel[ch][dateStr]) {
-                const row = dailyByChannel[ch][dateStr];
-                if (row.transactions > 0) {
+              if (channelHasActivity(ch, dateStr)) {
+                const hash = simpleHash(u.id + dateStr);
+                if (hash < userWeight * channelsToCheck.length) {
                   hasActivity = true;
                   break;
                 }

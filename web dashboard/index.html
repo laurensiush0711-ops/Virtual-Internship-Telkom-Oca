@@ -56,6 +56,7 @@
     <div>Channel: <span id="active-channel">All Channels</span></div>
     <div>User: <span id="active-user">All Users</span></div>
     <div id="date-warning" class="date-warning" style="display:none;">⚠ Selected date is outside data range</div>
+    <div id="data-source-status" class="data-source-status" style="display:none;"></div>
   </div>
 
   <!-- ===== TABS ===== -->
@@ -95,10 +96,10 @@
         </div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">Avg Longest Inactive Day</div>
+        <div class="kpi-label">Avg Inactive Interval</div>
         <div class="kpi-value" id="kpi-churn-rate">--</div>
         <div class="kpi-sub">
-          Avg longest period without activity
+          Avg gap between active days
           <span class="kpi-delta" id="delta-churn-rate"></span>
         </div>
       </div>

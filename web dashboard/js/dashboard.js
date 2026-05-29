@@ -115,6 +115,16 @@ document.addEventListener('DOMContentLoaded', () => {
       tabContents.forEach(tc => tc.classList.remove('active'));
       document.getElementById(target).classList.add('active');
       window.location.hash = target;
+      window.scrollTo(0, 0);
+      // Trigger Chart.js resize after tab switch to fix hidden canvas sizing
+      setTimeout(() => {
+        if (typeof Chart !== 'undefined') {
+          Object.values(Chart.instances || {}).forEach(c => {
+            try { c.resize(); } catch(e) {}
+          });
+        }
+        window.dispatchEvent(new Event('resize'));
+      }, 50);
     });
   });
 

@@ -66,10 +66,10 @@ DATA = (() => {
   // ---- CHANNEL BASE METRICS (per day, per channel) ----
   // Typical daily volumes with realistic success rates
   const channelBase = {
-    'WhatsApp': { avgDaily: 555, successRate: 0.95 },
-    'SMS':      { avgDaily: 222, successRate: 0.90 },
-    'Email':    { avgDaily: 444, successRate: 0.85 },
-    'Call':     { avgDaily: 142, successRate: 0.72 }
+    'WhatsApp': { avgDaily: 555, successRate: 0.95, billableRate: 0.82 },
+    'SMS':      { avgDaily: 222, successRate: 0.90, billableRate: 0.88 },
+    'Email':    { avgDaily: 444, successRate: 0.85, billableRate: 0.72 },
+    'Call':     { avgDaily: 142, successRate: 0.72, billableRate: 0.95 }
   };
 
   // ---- GENERATE DAILY DATA ----
@@ -103,7 +103,7 @@ DATA = (() => {
         ? tx - success
         : Math.min(rawFailure, Math.max(0, tx - success));
       const revenue = Math.round(tx * rand(1800, 5500));
-      const billable = Math.round(tx * randFloat(0.65, 0.85));
+      const billable = Math.round(tx * base.billableRate * randFloat(0.92, 1.05));
       dailyData[ch][date] = { transactions: tx, success, failure, revenue, billable };
     });
   });
@@ -174,12 +174,12 @@ DATA = (() => {
       const tx = Math.round(dailyTx * hourlyPattern[ch][h] * randFloat(0.8, 1.2));
       const success = Math.round(tx * base.successRate * randFloat(0.95, 1.02));
       const rawFail = Math.round(tx * (1 - base.successRate) * randFloat(0.7, 1.0));
-      const fail = (ch === 'Call' || ch === 'SMS')
+      const failure = (ch === 'Call' || ch === 'SMS')
         ? tx - success
         : Math.min(rawFail, Math.max(0, tx - success));
-      const neutral = Math.max(0, tx - success - fail);
+      const neutral = Math.max(0, tx - success - failure);
       const revenue = Math.round(tx * rand(1800, 5500));
-      hourlyData.push({ hour: h, channel: ch, transactions: tx, success, fail, neutral, revenue });
+      hourlyData.push({ hour: h, channel: ch, transactions: tx, success, failure, neutral, revenue });
     });
   }
 
@@ -274,24 +274,24 @@ DATA = (() => {
     const grandTotal = { transactions: 0, revenue: 0 };
     CHANNELS.forEach(ch => {
       if (!data[ch]) return;
-      let tx = 0, succ = 0, rev = 0, bill = 0, fail = 0, neutral = 0;
+      let tx = 0, succ = 0, rev = 0, bill = 0, failure = 0, neutral = 0;
       Object.values(data[ch]).forEach(row => {
         tx += row.transactions;
         succ += row.success;
-        fail += row.failure;
+        failure += row.failure;
         neutral += (row.transactions - row.success - row.failure);
         rev += row.revenue;
         bill += row.billable;
       });
       const billableTx = Math.round(bill);
-      summary[ch] = { transactions: tx, success: succ, fail, neutral, revenue: rev, billable: billableTx };
+      summary[ch] = { transactions: tx, success: succ, failure, neutral, revenue: rev, billable: billableTx };
       grandTotal.transactions += tx;
       grandTotal.revenue += rev;
     });
     CHANNELS.forEach(ch => {
       if (summary[ch]) {
         summary[ch].successRate = summary[ch].transactions > 0 ? summary[ch].success / summary[ch].transactions : 0;
-        summary[ch].failureRate = summary[ch].transactions > 0 ? summary[ch].fail / summary[ch].transactions : 0;
+        summary[ch].failureRate = summary[ch].transactions > 0 ? summary[ch].failure / summary[ch].transactions : 0;
         summary[ch].billableRate = summary[ch].transactions > 0 ? summary[ch].billable / summary[ch].transactions : 0;
         summary[ch].revenueShare = grandTotal.revenue > 0 ? summary[ch].revenue / grandTotal.revenue : 0;
         summary[ch].shareOfTotal = grandTotal.transactions > 0 ? summary[ch].transactions / grandTotal.transactions : 0;
@@ -308,22 +308,24 @@ DATA = (() => {
     chs.forEach(ch => { Object.keys(data[ch]).forEach(d => dates.add(d)); });
     const userCount = totalUsers || users.length;
     Array.from(dates).sort().forEach(date => {
-      let tx = 0, succ = 0, rev = 0, users = 0, fail = 0;
+      let tx = 0, succ = 0, rev = 0, users = 0, failure = 0;
       chs.forEach(ch => {
         if (data[ch][date]) {
           const row = data[ch][date];
           tx += row.transactions;
           succ += row.success;
-          fail += row.failure;
+          failure += row.failure;
           rev += row.revenue;
         }
       });
       // Simulate active users as a fraction of total users
-      const totalAvgDaily = chs.reduce((s, ch) => s + ((channelBase[ch] && channelBase[ch].avgDaily) || 0), 0);
+      // Scale the baseline by userCount / total user count to handle industry/user filters
+      const scaleFactor = userCount / users.length;
+      const totalAvgDaily = chs.reduce((s, ch) => s + ((channelBase[ch] && channelBase[ch].avgDaily) || 0), 0) * scaleFactor;
       users = Math.round(userCount * (tx / (Math.max(totalAvgDaily, 1) * 1.5)));
       if (users < 1) users = 1;
       if (users > userCount) users = userCount;
-      trend[date] = { transactions: tx, success: succ, fail, revenue: rev, activeUsers: users };
+      trend[date] = { transactions: tx, success: succ, failure, revenue: rev, activeUsers: users };
     });
     return trend;
   }

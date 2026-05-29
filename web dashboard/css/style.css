@@ -160,6 +160,30 @@ body {
   margin-left: auto;
 }
 
+/* ---- DATA SOURCE STATUS ---- */
+.data-source-status {
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.data-source-status.live {
+  color: #00B894;
+  background: rgba(0, 184, 148, 0.1);
+}
+
+.data-source-status.offline {
+  color: #636E72;
+  background: rgba(99, 110, 114, 0.1);
+}
+
+.data-source-status.error {
+  color: #E17055;
+  background: rgba(225, 112, 85, 0.1);
+}
+
 /* ---- ACTIVE FILTERS BAR ---- */
 .active-filters {
   background: var(--card-bg);
@@ -185,6 +209,12 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
@@ -493,7 +523,6 @@ body {
   }
   .tab-nav {
     padding: 0 16px;
-    overflow-x: auto;
   }
   .tab-content {
     padding: 16px;

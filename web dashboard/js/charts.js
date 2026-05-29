@@ -26,6 +26,11 @@ const CHARTS = (() => {
   let chartInstances = {};
 
   // ---- HELPERS ----
+  function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   function formatIDR(val) {
     if (val >= 1e9) return 'Rp' + (val / 1e9).toFixed(1) + 'B';
     if (val >= 1e6) return 'Rp' + (val / 1e6).toFixed(1) + 'M';
@@ -59,6 +64,8 @@ const CHARTS = (() => {
       if (obj.fail != null) obj.fail = obj.failure;
       if (obj.neutral != null) obj.neutral = 0;
     }
+    return obj;
+  }
     return obj;
   }
 
@@ -511,7 +518,7 @@ const CHARTS = (() => {
           },
           {
             label: 'Failure',
-            data: channels.map(ch => summary[ch].fail),
+            data: channels.map(ch => summary[ch].failure),
             backgroundColor: COLORS.failure
           },
           {
@@ -616,8 +623,8 @@ const CHARTS = (() => {
       html += `
         <tr>
           <td>${i + 1}</td>
-          <td>${u.name}</td>
-          <td>${u.industry}</td>
+          <td>${escapeHtml(u.name)}</td>
+          <td>${escapeHtml(u.industry)}</td>
           <td>${formatNum(u.transactions)}</td>
           <td>${formatIDR(u.revenue)}</td>
           <td>${share}%</td>
@@ -668,8 +675,8 @@ const CHARTS = (() => {
       }
       html += `
         <tr>
-          <td>${u.name}</td>
-          <td>${u.industry}</td>
+          <td>${escapeHtml(u.name)}</td>
+          <td>${escapeHtml(u.industry)}</td>
           <td>${u.avgInterval}</td>
           <td><span class="badge badge-${statusClass}">${status}</span></td>
         </tr>
@@ -1044,14 +1051,15 @@ const CHARTS = (() => {
 
     monoUsers.forEach(u => {
       const priorityClass = (u.priority || 'Low').toLowerCase();
+      const channelLower = (u.channel || '').toLowerCase();
       html += `
         <tr>
-          <td>${u.name}</td>
-          <td>${u.industry}</td>
-          <td><span class="badge badge-${u.channel.toLowerCase()}">${u.channel}</span></td>
+          <td>${escapeHtml(u.name)}</td>
+          <td>${escapeHtml(u.industry)}</td>
+          <td><span class="badge badge-${escapeHtml(channelLower)}">${escapeHtml(u.channel)}</span></td>
           <td>${formatNum(u.transactions)}</td>
           <td>${formatIDR(u.revenue)}</td>
-          <td><span class="badge badge-${priorityClass}">${u.priority || 'Low'}</span></td>
+          <td><span class="badge badge-${escapeHtml(priorityClass)}">${escapeHtml(u.priority || 'Low')}</span></td>
         </tr>
       `;
     });
@@ -1121,7 +1129,7 @@ const CHARTS = (() => {
 
       html += `
         <tr>
-          <td><strong>${ch}</strong></td>
+          <td><strong>${escapeHtml(ch)}</strong></td>
           <td>${formatPct(avgRate)}</td>
           <td>${formatPct(minRate)}</td>
           <td>${formatPct(maxRate)}</td>
@@ -1165,7 +1173,7 @@ const CHARTS = (() => {
         <div class="churn-item">
           <div class="churn-item-top">
             <span class="badge badge-${statusClass}">${status}</span>
-            <span class="churn-name">${u.name}</span>
+            <span class="churn-name">${escapeHtml(u.name)}</span>
           </div>
           <div class="churn-item-bottom">
             <span class="churn-meta">Avg ${u.avgInterval}d interval</span>
@@ -1243,7 +1251,7 @@ const CHARTS = (() => {
         if (prior[h.channel] && prior[h.channel][prevDate]) {
           prior[h.channel][prevDate].transactions += h.transactions;
           prior[h.channel][prevDate].success += h.success;
-          prior[h.channel][prevDate].failure += h.fail;
+          prior[h.channel][prevDate].failure += h.failure;
           prior[h.channel][prevDate].revenue += h.revenue;
         }
       });
@@ -1329,7 +1337,7 @@ const CHARTS = (() => {
         const startStr = latestDate;
         const endStr = latestDate;
         data = DATA.getDailyDataForRange(startStr, endStr, channel, industry, user);
-        prevData = computePriorData(period, channel, industry, referenceDate, user);
+        prevData = computePriorData('24h', channel, industry, referenceDate, user);
         summary = DATA.computeChannelSummary(data);
         trend = DATA.computeDailyTrend(data, null, filteredUserCount);
       } else {
@@ -1351,7 +1359,7 @@ const CHARTS = (() => {
       DATA.CHANNELS.forEach(ch => {
         if (channel !== 'All' && ch !== channel) return;
         hourlySummary[ch] = {
-          transactions: 0, success: 0, fail: 0, neutral: 0,
+          transactions: 0, success: 0, failure: 0, neutral: 0,
           revenue: 0, billable: 0, successRate: 0, failureRate: 0,
           billableRate: 0, revenueShare: 0, shareOfTotal: 0
         };
@@ -1363,7 +1371,7 @@ const CHARTS = (() => {
         if (hourlySummary[h.channel]) {
           hourlySummary[h.channel].transactions += h.transactions;
           hourlySummary[h.channel].success += h.success;
-          hourlySummary[h.channel].fail += h.fail;
+          hourlySummary[h.channel].failure += h.failure;
           hourlySummary[h.channel].neutral += h.neutral;
           hourlySummary[h.channel].revenue += h.revenue;
         }
@@ -1380,7 +1388,7 @@ const CHARTS = (() => {
           const s = hourlySummary[ch];
           s.transactions = Math.round(s.transactions * ratio);
           s.success = Math.round(s.success * ratio);
-          s.fail = Math.round(s.fail * ratio);
+          s.failure = Math.round(s.failure * ratio);
           s.neutral = Math.round(s.neutral * ratio);
           s.revenue = Math.round(s.revenue * ratio);
           s.billable = Math.round(s.billable * ratio);
@@ -1393,7 +1401,7 @@ const CHARTS = (() => {
       Object.keys(hourlySummary).forEach(ch => {
         const s = hourlySummary[ch];
         s.successRate = s.transactions > 0 ? s.success / s.transactions : 0;
-        s.failureRate = s.transactions > 0 ? s.fail / s.transactions : 0;
+        s.failureRate = s.transactions > 0 ? s.failure / s.transactions : 0;
         s.billableRate = currentBillableRate;
         s.revenueShare = totalHrRev > 0 ? s.revenue / totalHrRev : 0;
         s.shareOfTotal = totalHrTx > 0 ? s.transactions / totalHrTx : 0;
@@ -1405,14 +1413,14 @@ const CHARTS = (() => {
       const hourlyTrend = {};
       for (let h = 24 - hours; h < 24; h++) {
         const hourKey = latestDate + 'T' + String(h).padStart(2, '0') + ':00';
-        hourlyTrend[hourKey] = { transactions: 0, success: 0, fail: 0, revenue: 0, activeUsers: 0 };
+        hourlyTrend[hourKey] = { transactions: 0, success: 0, failure: 0, revenue: 0, activeUsers: 0 };
         DATA.hourlyData.forEach(row => {
           if (channel !== 'All' && row.channel !== channel) return;
           if (row.hour === h) {
-            hourlyTrend[hourKey].transactions += row.transactions;
-            hourlyTrend[hourKey].success += row.success;
-            hourlyTrend[hourKey].fail += row.fail || 0;
-            hourlyTrend[hourKey].revenue += row.revenue;
+          hourlyTrend[hourKey].transactions += row.transactions;
+          hourlyTrend[hourKey].success += row.success;
+          hourlyTrend[hourKey].failure += row.failure || 0;
+          hourlyTrend[hourKey].revenue += row.revenue;
           }
         });
       }
@@ -1436,7 +1444,7 @@ const CHARTS = (() => {
           const t = hourlyTrend[date];
           t.transactions = Math.round(t.transactions * trendRatio);
           t.success = Math.round(t.success * trendRatio);
-          t.fail = Math.round(t.fail * trendRatio);
+          t.failure = Math.round(t.failure * trendRatio);
           t.revenue = Math.round(t.revenue * trendRatio);
           t.activeUsers = Math.max(1, Math.round(t.activeUsers * trendRatio));
         });
@@ -1460,7 +1468,7 @@ const CHARTS = (() => {
             }
             hourlyDataByChannel[row.channel][hourKey].transactions += row.transactions;
             hourlyDataByChannel[row.channel][hourKey].success += row.success;
-            hourlyDataByChannel[row.channel][hourKey].failure += row.fail || 0;
+            hourlyDataByChannel[row.channel][hourKey].failure += row.failure || 0;
           }
         });
       }
@@ -1487,7 +1495,7 @@ const CHARTS = (() => {
             const s = hourlySummary[ch];
             s.transactions = Math.round(s.transactions * share);
             s.success = Math.round(s.success * share);
-            s.fail = Math.round(s.fail * share);
+            s.failure = Math.round(s.failure * share);
             s.neutral = Math.round(s.neutral * share);
             s.revenue = Math.round(s.revenue * share);
             s.billable = Math.round(s.billable * share);
@@ -1498,7 +1506,7 @@ const CHARTS = (() => {
             t.transactions = Math.round(t.transactions * share);
             t.success = Math.round(t.success * share);
             t.revenue = Math.round(t.revenue * share);
-            t.fail = Math.round(t.fail * share);
+            t.failure = Math.round(t.failure * share);
             t.activeUsers = Math.max(1, Math.round(t.activeUsers * share));
           });
           Object.keys(hourlyDataByChannel).forEach(ch => {
@@ -1633,5 +1641,5 @@ const CHARTS = (() => {
     }
   }
 
-  return { renderAll, formatNum, formatIDR, formatPct, destroyChart };
+  return { renderAll, formatNum, formatIDR, formatPct, destroyChart, escapeHtml };
 })();
