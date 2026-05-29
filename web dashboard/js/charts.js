@@ -107,12 +107,12 @@ const CHARTS = (() => {
     function setDelta(id, current, previous, invert) {
       const el = document.getElementById(id);
       if (!el) return;
-      if (!previous || previous === 0) {
+      if (previous == null || previous === 0) {
         el.textContent = 'N/A';
         el.className = 'kpi-delta flat';
         return;
       }
-      const raw = ((current - previous) / previous) * 100;
+      const raw = ((current - previous) / Math.abs(previous)) * 100;
       if (Math.abs(raw) < 0.05) {
         el.textContent = '0.0%';
         el.className = 'kpi-delta flat';
@@ -138,7 +138,8 @@ const CHARTS = (() => {
     // Update KPI values
     document.getElementById('kpi-total-tx').textContent = formatNum(totalTx);
     document.getElementById('kpi-active-users').textContent = activeUsers;
-    document.getElementById('kpi-active-users').className = 'kpi-value' + (prevActiveUserCount > activeUserCount ? ' trend-down' : ' trend-up');
+    const auClass = prevActiveUserCount > activeUserCount ? ' trend-down' : (prevActiveUserCount < activeUserCount ? ' trend-up' : '');
+    document.getElementById('kpi-active-users').className = 'kpi-value' + auClass;
 
     const successRateEl = document.getElementById('kpi-success-rate');
     successRateEl.textContent = formatPct(successRate);
@@ -788,8 +789,8 @@ const CHARTS = (() => {
           chunkTx += trend[d].transactions;
           chunkRev += trend[d].revenue;
         });
-        txData.push(Math.round(chunkTx / chunk.length));
-        revData.push(Math.round(chunkRev / chunk.length));
+        txData.push(Math.round(chunkTx));
+        revData.push(Math.round(chunkRev));
       }
     } else {
       // "all" or 92 days: aggregate weekly (every 7 days)
@@ -811,8 +812,8 @@ const CHARTS = (() => {
           chunkTx += trend[d].transactions;
           chunkRev += trend[d].revenue;
         });
-        txData.push(Math.round(chunkTx / chunk.length));
-        revData.push(Math.round(chunkRev / chunk.length));
+        txData.push(Math.round(chunkTx));
+        revData.push(Math.round(chunkRev));
       }
     }
 

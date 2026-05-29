@@ -244,8 +244,11 @@ function computeChurnRisk(unified, users) {
   const userLast = {};
   unified.forEach(r => {
     if (!r.created_at) return;
-    if (!userLast[r.user_id] || r.created_at > userLast[r.user_id].lastActive) {
-      userLast[r.user_id] = { lastActive: r.created_at, tx:0, rev:0 };
+    if (!userLast[r.user_id]) {
+      userLast[r.user_id] = { lastActive: r.created_at, tx: 0, rev: 0 };
+    }
+    if (r.created_at > userLast[r.user_id].lastActive) {
+      userLast[r.user_id].lastActive = r.created_at;
     }
     userLast[r.user_id].tx++;
     userLast[r.user_id].rev += r.revenue;

@@ -19,6 +19,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
   }
 
   let fetchAttempted = false;
+  let fetchInProgress = false;
 
   function showLoading(on) {
     const overlay = document.getElementById('loading-overlay');
@@ -26,14 +27,16 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
   }
 
   function loadRealData() {
-    if (fetchAttempted) return;
-    fetchAttempted = true;
+    if (fetchInProgress) return;
+    fetchInProgress = true;
     showLoading(true);
 
     fetch(APPS_SCRIPT_URL)
       .then(res => res.json())
       .then(json => {
         showLoading(false);
+        fetchInProgress = false;
+        fetchAttempted = true;
         if (json.error) {
           console.warn('[data-fetcher] Apps Script error:', json.error);
           return;
@@ -43,15 +46,24 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
       })
       .catch(err => {
         showLoading(false);
+        fetchInProgress = false;
         console.warn('[data-fetcher] Fetch failed:', err.message);
       });
   }
 
   function buildDataFromResponse(resp) {
-    const currentYear = new Date().getFullYear().toString();
+    const currentYear = new Date().getFullYear();
     function fixYear(d) {
       if (!d) return '';
-      return d.replace(/^\d{4}/, currentYear);
+      const parts = d.split('-');
+      if (parts.length >= 1) {
+        const yr = parseInt(parts[0], 10);
+        if (yr < 2020 || yr > 2030) {
+          parts[0] = String(currentYear);
+          return parts.join('-');
+        }
+      }
+      return d.replace(/^\d{4}/, String(currentYear));
     }
 
     const channels = Object.keys(resp.dailyDataByChannel || {});
@@ -169,12 +181,12 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
       return trend;
     }
 
-    // Hourly distribution patterns (same as dummy data.js)
+    // Hourly distribution patterns (normalized to sum to 1.0)
     const hourlyPattern = {
-      'WhatsApp': [0.02,0.01,0.01,0.01,0.01,0.02,0.03,0.05,0.07,0.08,0.07,0.06,0.05,0.06,0.07,0.08,0.07,0.06,0.05,0.04,0.03,0.03,0.02,0.02],
-      'SMS':      [0.01,0.01,0.01,0.01,0.02,0.03,0.04,0.06,0.07,0.07,0.06,0.05,0.05,0.06,0.07,0.07,0.06,0.05,0.04,0.04,0.03,0.02,0.02,0.01],
-      'Email':    [0.01,0.01,0.01,0.01,0.02,0.03,0.05,0.06,0.07,0.07,0.06,0.05,0.04,0.05,0.06,0.07,0.07,0.06,0.05,0.04,0.03,0.02,0.02,0.01],
-      'Call':     [0.01,0.01,0.01,0.01,0.01,0.02,0.03,0.05,0.06,0.07,0.06,0.05,0.04,0.05,0.06,0.07,0.07,0.06,0.05,0.04,0.03,0.02,0.02,0.01]
+      'WhatsApp': [0.0196,0.0098,0.0098,0.0098,0.0098,0.0196,0.0294,0.0490,0.0686,0.0784,0.0686,0.0588,0.0490,0.0588,0.0686,0.0784,0.0686,0.0588,0.0490,0.0392,0.0294,0.0294,0.0196,0.0196],
+      'SMS':      [0.0104,0.0104,0.0104,0.0104,0.0208,0.0313,0.0417,0.0625,0.0729,0.0729,0.0625,0.0521,0.0521,0.0625,0.0729,0.0729,0.0625,0.0521,0.0417,0.0417,0.0313,0.0208,0.0208,0.0104],
+      'Email':    [0.0103,0.0103,0.0103,0.0103,0.0206,0.0309,0.0515,0.0619,0.0722,0.0722,0.0619,0.0515,0.0412,0.0515,0.0619,0.0722,0.0722,0.0619,0.0515,0.0412,0.0309,0.0206,0.0206,0.0103],
+      'Call':     [0.0110,0.0110,0.0110,0.0110,0.0110,0.0220,0.0330,0.0549,0.0659,0.0769,0.0659,0.0549,0.0440,0.0549,0.0659,0.0769,0.0769,0.0659,0.0549,0.0440,0.0330,0.0220,0.0220,0.0110]
     };
 
     function generateHourlyData(dailyByChannel, channelSummary, channels) {
@@ -276,6 +288,84 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
 
       getUserShare: function(userName) {
         return userWeightMap[userName] || (1 / Math.max(users.length, 1));
+      },
+
+      computeInactivityData: function(startStr, endStr, channelFilter, industryFilter, userFilter) {
+        const start = new Date(startStr);
+        const end = new Date(endStr);
+        let relevantUsers = users;
+
+        if (industryFilter && industryFilter !== 'All') {
+          relevantUsers = relevantUsers.filter(u => u.industry === industryFilter);
+        }
+        if (userFilter && userFilter !== 'All') {
+          relevantUsers = relevantUsers.filter(u => u.user_name === userFilter || u.name === userFilter);
+        }
+
+        const channelsToCheck = channelFilter && channelFilter !== 'All' ? [channelFilter] : channels;
+        let totalAvgInterval = 0;
+        let maxInactiveDay = 0;
+        let userCount = 0;
+
+        relevantUsers.forEach(u => {
+          const activeDates = [];
+          const d = new Date(start);
+          while (d <= end) {
+            const dateStr = d.toISOString().split('T')[0];
+            let hasActivity = false;
+
+            for (let ci = 0; ci < channelsToCheck.length; ci++) {
+              const ch = channelsToCheck[ci];
+              if (dailyByChannel[ch] && dailyByChannel[ch][dateStr]) {
+                const row = dailyByChannel[ch][dateStr];
+                if (row.transactions > 0) {
+                  hasActivity = true;
+                  break;
+                }
+              }
+            }
+
+            if (hasActivity) {
+              activeDates.push(new Date(d));
+            }
+            d.setDate(d.getDate() + 1);
+          }
+
+          if (activeDates.length >= 2) {
+            let totalGap = 0;
+            let gapCount = 0;
+            let maxGap = 0;
+
+            for (let i = 1; i < activeDates.length; i++) {
+              const diffTime = activeDates[i].getTime() - activeDates[i - 1].getTime();
+              const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+              totalGap += diffDays;
+              gapCount++;
+              if (diffDays > maxGap) maxGap = diffDays;
+            }
+
+            const avgGap = gapCount > 0 ? totalGap / gapCount : 0;
+            totalAvgInterval += avgGap;
+            if (maxGap > maxInactiveDay) maxInactiveDay = maxGap;
+            userCount++;
+          } else if (activeDates.length === 1) {
+            const activeDate = activeDates[0];
+            const diffFromStart = Math.round((activeDate - start) / (1000 * 60 * 60 * 24));
+            const diffToEnd = Math.round((end - activeDate) / (1000 * 60 * 60 * 24));
+            const singleGap = Math.max(diffFromStart, diffToEnd);
+            totalAvgInterval += singleGap;
+            if (singleGap > maxInactiveDay) maxInactiveDay = singleGap;
+            userCount++;
+          }
+        });
+
+        const avgInactiveInterval = userCount > 0 ? Math.round(totalAvgInterval / userCount) : 0;
+
+        return {
+          avgInactiveInterval: avgInactiveInterval,
+          totalUsers: userCount,
+          maxInactiveDay: maxInactiveDay
+        };
       }
     };
 
