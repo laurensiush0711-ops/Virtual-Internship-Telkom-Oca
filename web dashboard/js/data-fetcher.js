@@ -128,7 +128,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
             result[ch][d] = {
               transactions: row.transactions || 0,
               success: row.success || 0,
-              failure: row.failure || 0,
+              failure: row.failure || row.fail || 0,
               revenue: row.revenue || 0,
               billable: row.billable || 0
             };
