@@ -416,7 +416,6 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
       const latestDate = allDates[allDates.length - 1];
       dateInput.max = latestDate;
       dateInput.value = latestDate;
-      dateInput.dispatchEvent(new Event('change'));
     }
 
     // Rebuild user select dropdown with real user names

@@ -155,7 +155,7 @@ function computeChannelSummary(unified) {
   const obj = {};
   Object.entries(groups).forEach(([ch, g]) => {
     obj[ch] = {
-      transactions: g.tx, success: g.succ, fail: g.fail, neutral: g.neutral,
+      transactions: g.tx, success: g.succ, failure: g.fail, neutral: g.neutral,
       revenue: g.rev, billable: g.bill,
       successRate: g.tx > 0 ? g.succ / g.tx : 0,
       failureRate: g.tx > 0 ? g.fail / g.tx : 0,
@@ -183,7 +183,7 @@ function computeDailyTrend(unified) {
   });
   const obj = {};
   Object.entries(days).forEach(([d, g]) => {
-    obj[d] = { transactions: g.transactions, success: g.success, fail: g.fail, revenue: g.revenue, activeUsers: g.activeUsers.size };
+    obj[d] = { transactions: g.transactions, success: g.success, failure: g.fail, revenue: g.revenue, activeUsers: g.activeUsers.size };
   });
   return obj;
 }
@@ -196,13 +196,13 @@ function computeDailyByChannel(unified) {
     if (!r.created_at || !r.channel) return;
     if (!daily[r.channel]) daily[r.channel] = {};
     if (!daily[r.channel][r.created_at]) {
-      daily[r.channel][r.created_at] = { transactions:0, success:0, fail:0, revenue:0, billable:0 };
+      daily[r.channel][r.created_at] = { transactions:0, success:0, failure:0, revenue:0, billable:0 };
     }
     const g = daily[r.channel][r.created_at];
     g.transactions++;
     g.revenue += r.revenue;
     if (r.is_success) g.success++;
-    else if (r.is_failure) g.fail++;
+    else if (r.is_failure) g.failure++;
     if (r.is_charge) g.billable++;
   });
   return daily;

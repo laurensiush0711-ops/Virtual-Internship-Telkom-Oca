@@ -949,7 +949,7 @@ const CHARTS = (() => {
           {
             label: 'Other / Processing',
             data: aggregated.map(a => {
-              const neutral = a.totalTransactions - a.totalSuccess - a.totalFailure;
+              const neutral = Math.max(0, a.totalTransactions - a.totalSuccess - a.totalFailure);
               return a.totalTransactions > 0 ? neutral / a.totalTransactions : 0;
             }),
             backgroundColor: '#DFE6E9',
