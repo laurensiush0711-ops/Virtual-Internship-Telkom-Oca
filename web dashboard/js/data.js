@@ -308,7 +308,7 @@ DATA = (() => {
     chs.forEach(ch => { Object.keys(data[ch]).forEach(d => dates.add(d)); });
     const userCount = totalUsers || users.length;
     Array.from(dates).sort().forEach(date => {
-      let tx = 0, succ = 0, rev = 0, users = 0, failure = 0;
+      let tx = 0, succ = 0, rev = 0, activeCount = 0, failure = 0;
       chs.forEach(ch => {
         if (data[ch][date]) {
           const row = data[ch][date];
@@ -320,12 +320,13 @@ DATA = (() => {
       });
       // Simulate active users as a fraction of total users
       // Scale the baseline by userCount / total user count to handle industry/user filters
-      const scaleFactor = userCount / users.length;
+      const totalUserCount = users.length;
+      const scaleFactor = userCount / totalUserCount;
       const totalAvgDaily = chs.reduce((s, ch) => s + ((channelBase[ch] && channelBase[ch].avgDaily) || 0), 0) * scaleFactor;
-      users = Math.round(userCount * (tx / (Math.max(totalAvgDaily, 1) * 1.5)));
-      if (users < 1) users = 1;
-      if (users > userCount) users = userCount;
-      trend[date] = { transactions: tx, success: succ, failure, revenue: rev, activeUsers: users };
+      activeCount = Math.round(userCount * (tx / (Math.max(totalAvgDaily, 1) * 1.5)));
+      if (activeCount < 1) activeCount = 1;
+      if (activeCount > userCount) activeCount = userCount;
+      trend[date] = { transactions: tx, success: succ, failure, revenue: rev, activeUsers: activeCount };
     });
     return trend;
   }

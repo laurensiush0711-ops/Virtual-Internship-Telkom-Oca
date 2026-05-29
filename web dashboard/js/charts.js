@@ -66,8 +66,6 @@ const CHARTS = (() => {
     }
     return obj;
   }
-    return obj;
-  }
 
   // ---- KPI CARDS ----
   function updateKPIs(data, prevData, summary, trend, activeUserCount, prevActiveUserCount, inactivityData, prevInactivityData) {
@@ -1641,5 +1639,5 @@ const CHARTS = (() => {
     }
   }
 
-  return { renderAll, formatNum, formatIDR, formatPct, destroyChart, escapeHtml };
+  return { renderAll, formatNum, formatIDR, formatPct, destroyChart, escapeHtml, getChartInstances: () => chartInstances };
 })();

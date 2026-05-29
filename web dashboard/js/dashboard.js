@@ -118,8 +118,8 @@ document.addEventListener('DOMContentLoaded', () => {
       window.scrollTo(0, 0);
       // Trigger Chart.js resize after tab switch to fix hidden canvas sizing
       setTimeout(() => {
-        if (typeof Chart !== 'undefined') {
-          Object.values(Chart.instances || {}).forEach(c => {
+        if (typeof CHARTS !== 'undefined' && CHARTS.getChartInstances) {
+          Object.values(CHARTS.getChartInstances()).forEach(c => {
             try { c.resize(); } catch(e) {}
           });
         }
