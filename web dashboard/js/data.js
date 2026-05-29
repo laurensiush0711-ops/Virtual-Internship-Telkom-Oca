@@ -3,7 +3,9 @@
 // Realistic 3-month dataset (Mar–May 2026)
 // ====================================================================
 
-const DATA = (() => {
+let DATA;
+try {
+DATA = (() => {
   const CHANNELS = ['WhatsApp', 'SMS', 'Email', 'Call'];
   const INDUSTRIES = [
     'Financial Services', 'Retail', 'Healthcare', 'Education',
@@ -337,6 +339,45 @@ const DATA = (() => {
   const initialSummary = computeChannelSummary(initialData);
   const initialTrend = computeDailyTrend(initialData);
 
+  // ---- CHURN RISK COMPUTATION ----
+  function computeChurnData(startStr, endStr, channelFilter, industryFilter, userFilter) {
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    let relevantUsers = users;
+
+    if (industryFilter && industryFilter !== 'All') {
+      relevantUsers = relevantUsers.filter(u => u.industry === industryFilter);
+    }
+    if (userFilter && userFilter !== 'All') {
+      relevantUsers = relevantUsers.filter(u => u.name === userFilter || u.user_name === userFilter);
+    }
+
+    let atRiskCount = 0;
+    relevantUsers.forEach(u => {
+      let hasActivity = false;
+      const channelsToCheck = channelFilter && channelFilter !== 'All' ? [channelFilter] : CHANNELS;
+      const d = new Date(start);
+      while (d <= end) {
+        const dateStr = formatDate(d);
+        for (let ci = 0; ci < channelsToCheck.length; ci++) {
+          const ch = channelsToCheck[ci];
+          if (userData[u.id] && userData[u.id][ch] && userData[u.id][ch][dateStr] && userData[u.id][ch][dateStr].transactions > 0) {
+            hasActivity = true;
+            break;
+          }
+        }
+        if (hasActivity) break;
+        d.setDate(d.getDate() + 1);
+      }
+      if (!hasActivity) atRiskCount++;
+    });
+
+    return {
+      atRiskCount,
+      totalUsers: relevantUsers.length
+    };
+  }
+
   // ---- RETURN PUBLIC API ----
   return {
     CHANNELS,
@@ -351,8 +392,30 @@ const DATA = (() => {
     getUserShare,
     computeChannelSummary,
     computeDailyTrend,
+    computeChurnData,
     initialSummary,
     initialTrend,
     initialData
   };
 })();
+} catch (e) {
+  console.error('[data.js] Failed to generate dummy data:', e);
+  DATA = {
+    CHANNELS: ['WhatsApp', 'SMS', 'Email', 'Call'],
+    INDUSTRIES: [],
+    users: [],
+    userMap: {},
+    allDates: [],
+    hourlyData: [],
+    dailyData: {},
+    channelBase: {},
+    getDailyDataForRange: function() { return {}; },
+    getUserShare: function() { return 0; },
+    computeChannelSummary: function() { return {}; },
+    computeDailyTrend: function() { return {}; },
+    computeChurnData: function() { return { atRiskCount: 0, totalUsers: 0 }; },
+    initialSummary: {},
+    initialTrend: {},
+    initialData: {}
+  };
+}

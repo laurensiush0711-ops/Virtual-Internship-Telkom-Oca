@@ -63,7 +63,7 @@ const CHARTS = (() => {
   }
 
   // ---- KPI CARDS ----
-  function updateKPIs(data, prevData, summary, trend, activeUserCount, prevActiveUserCount) {
+  function updateKPIs(data, prevData, summary, trend, activeUserCount, prevActiveUserCount, churnData, prevChurnData) {
     // Current period
     let totalTx = 0, totalRev = 0, totalSucc = 0, totalFail = 0, totalBill = 0;
     Object.values(data).forEach(chData => {
@@ -81,11 +81,9 @@ const CHARTS = (() => {
     const billableRate = totalTx > 0 ? totalBill / totalTx : 0;
 
     // Churn rate: at-risk users / total users
-    const totalUsers = DATA.users ? DATA.users.length : 20;
-    const atRiskUsers = (DATA.churnRisk && DATA.churnRisk.length)
-      ? DATA.churnRisk.length
-      : Math.round(totalUsers * 0.25);
-    const churnRate = totalUsers > 0 ? atRiskUsers / totalUsers : 0;
+    const atRiskUsers = churnData ? churnData.atRiskCount : 0;
+    const totalFilteredUsers = churnData ? churnData.totalUsers : (DATA.users ? DATA.users.length : 20);
+    const churnRate = totalFilteredUsers > 0 ? atRiskUsers / totalFilteredUsers : 0;
 
     // Previous period
     let prevTx = 0, prevRev = 0, prevSucc = 0, prevFail = 0, prevBill = 0;
@@ -104,6 +102,9 @@ const CHARTS = (() => {
     const prevActiveUsers = prevActiveUserCount != null ? prevActiveUserCount : 20;
     const prevSuccessRate = prevTx > 0 ? prevSucc / prevTx : 0;
     const prevBillableRate = prevTx > 0 ? prevBill / prevTx : 0;
+    const prevChurnRate = prevChurnData && prevChurnData.totalUsers > 0
+      ? prevChurnData.atRiskCount / prevChurnData.totalUsers
+      : null;
 
     // Helper: update a delta element
     // For "inverted" metrics (failure rate), a decrease is good (green up)
@@ -155,7 +156,7 @@ const CHARTS = (() => {
     setDelta('delta-total-tx', totalTx, prevTx);
     setDelta('delta-active-users', activeUsers, prevActiveUsers);
     setDelta('delta-success-rate', successRate, prevSuccessRate);
-    setDelta('delta-churn-rate', churnRate, null);
+    setDelta('delta-churn-rate', churnRate, prevChurnRate, true);
     setDelta('delta-revenue', totalRev, prevRev);
     setDelta('delta-billable-rate', billableRate, prevBillableRate);
   }
@@ -539,6 +540,35 @@ const CHARTS = (() => {
     });
   }
 
+  // ---- SHARED CHURN HELPER ----
+  function getChurnUsers(industryFilter, userFilter) {
+    if (DATA.churnRisk && DATA.churnRisk.length) {
+      return DATA.churnRisk
+        .filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
+                     (userFilter === 'All' || u.user_name === userFilter))
+        .map(u => ({
+          name: u.user_name,
+          industry: u.industry,
+          daysInactive: u.days_inactive,
+          riskScore: u.risk_score,
+          revenue: u.total_revenue
+        }))
+        .sort((a, b) => b.riskScore - a.riskScore);
+    }
+    // Fallback: simulate churn data
+    return DATA.users
+      .filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
+                   (userFilter === 'All' || u.name === userFilter || u.user_name === userFilter))
+      .map((u, i) => {
+        const seed = u.id ? u.id.charCodeAt(u.id.length - 1) : (i * 7 + 13);
+        const daysInactive = 2 + (seed % 25);
+        const riskScore = Math.min(95, 20 + daysInactive * 2 + (seed % 15));
+        return { name: u.user_name || u.name, industry: u.industry, riskScore, daysInactive };
+      })
+      .filter(u => u.riskScore > 40)
+      .sort((a, b) => b.riskScore - a.riskScore);
+  }
+
   // ---- TOP REVENUE USERS TABLE ----
   function renderTopUsersTable(canvasId, summary, industryFilter, userFilter) {
     const container = document.getElementById('top-users-table');
@@ -565,7 +595,7 @@ const CHARTS = (() => {
       const totalRev = Object.values(summary).reduce((s, ch) => s + ch.revenue, 0);
       userRevenue = allUsers.map((u, i) => {
         const share = (allUsers.length - i) / (allUsers.length * (allUsers.length + 1) / 2);
-        const rev = Math.round(totalRev * share * 0.6);
+        const rev = Math.round(totalRev * share);
         return { name: u.user_name || u.name, industry: u.industry, revenue: rev, transactions: Math.round(rev / 2500) };
       }).sort((a, b) => b.revenue - a.revenue);
     }
@@ -615,35 +645,7 @@ const CHARTS = (() => {
     const container = document.getElementById('churn-risk-table');
     if (!container) return;
 
-    let churnUsers;
-
-    // Use real data if available (from Apps Script)
-    if (DATA.churnRisk && DATA.churnRisk.length) {
-      churnUsers = DATA.churnRisk
-        .filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
-                     (userFilter === 'All' || u.user_name === userFilter))
-        .map(u => ({
-          name: u.user_name,
-          industry: u.industry,
-          daysInactive: u.days_inactive,
-          riskScore: u.risk_score,
-          revenue: u.total_revenue
-        }))
-        .sort((a, b) => b.riskScore - a.riskScore);
-    } else {
-      // Fallback: generate simulated churn data
-      churnUsers = DATA.users
-        .filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
-                     (userFilter === 'All' || u.name === userFilter || u.user_name === userFilter))
-        .map((u, i) => {
-          const seed = u.id ? u.id.charCodeAt(u.id.length - 1) : (i * 7 + 13);
-          const daysInactive = 2 + (seed % 25);
-          const riskScore = Math.min(95, 20 + daysInactive * 2 + (seed % 15));
-          return { name: u.user_name || u.name, industry: u.industry, riskScore, daysInactive };
-        })
-        .filter(u => u.riskScore > 40)
-        .sort((a, b) => b.riskScore - a.riskScore);
-    }
+    const churnUsers = getChurnUsers(industryFilter, userFilter);
 
     if (!churnUsers.length) {
       container.innerHTML = '<div class="text-muted" style="padding: 20px; text-align: center;">No at-risk users match current filters</div>';
@@ -691,10 +693,10 @@ const CHARTS = (() => {
     const dates = Object.keys(trend).sort();
     const waData = data && data['WhatsApp'] ? data['WhatsApp'] : {};
     const deliveryRates = dates.map(d => {
-      if (waData[d]) {
-        return waData[d].transactions > 0 ? waData[d].success / waData[d].transactions : 0;
+      if (waData[d] && waData[d].transactions > 0) {
+        return waData[d].success / waData[d].transactions;
       }
-      return trend[d].transactions > 0 ? trend[d].success / trend[d].transactions : 0;
+      return null;
     });
     const totalDelivered = dates.map(d => waData[d] ? waData[d].success : trend[d].success);
 
@@ -964,12 +966,11 @@ const CHARTS = (() => {
           name: u.user_name || u.name,
           industry: u.industry,
           channel,
-          channelIdx,
           revenue: baseRev,
           transactions: Math.round(baseRev / 2800),
           priority: seed % 3 === 0 ? 'High' : seed % 3 === 1 ? 'Medium' : 'Low'
         };
-      }).filter(u => u.channelIdx === 0 || u.channelIdx === 2);
+      });
     }
 
     if (!monoUsers || !monoUsers.length) {
@@ -1090,33 +1091,7 @@ const CHARTS = (() => {
     const container = document.getElementById('churn-alert-overview');
     if (!container) return;
 
-    let churnUsers;
-
-    if (DATA.churnRisk && DATA.churnRisk.length) {
-      churnUsers = DATA.churnRisk
-        .filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
-                     (userFilter === 'All' || u.user_name === userFilter))
-        .map(u => ({
-          name: u.user_name,
-          industry: u.industry,
-          daysInactive: u.days_inactive,
-          riskScore: u.risk_score
-        }))
-        .sort((a, b) => b.riskScore - a.riskScore);
-    } else {
-      churnUsers = DATA.users
-        .filter(u => (industryFilter === 'All' || u.industry === industryFilter) &&
-                     (userFilter === 'All' || u.name === userFilter || u.user_name === userFilter))
-        .map((u, i) => {
-          const seed = u.id ? u.id.charCodeAt(u.id.length - 1) : (i * 7 + 13);
-          const daysInactive = 2 + (seed % 25);
-          const riskScore = Math.min(95, 20 + daysInactive * 2 + (seed % 15));
-          return { name: u.user_name || u.name, industry: u.industry, riskScore, daysInactive };
-        })
-        .filter(u => u.riskScore > 40)
-        .sort((a, b) => b.riskScore - a.riskScore);
-    }
-
+    const churnUsers = getChurnUsers(industryFilter, userFilter);
     const top5 = churnUsers.slice(0, 5);
 
     if (!top5.length) {
@@ -1216,7 +1191,7 @@ const CHARTS = (() => {
         }
       });
       // Scale prior by industry using actual prevDate daily data
-      if (industry !== 'All' && user === 'All') {
+      if (industry !== 'All') {
         const industryData = DATA.getDailyDataForRange(prevDate, prevDate, channel, industry, 'All');
         Object.keys(prior).forEach(ch => {
           const fullTx = DATA.dailyData[ch] && DATA.dailyData[ch][prevDate]
@@ -1280,11 +1255,17 @@ const CHARTS = (() => {
       filteredUserCount = DATA.users.length;
     }
 
+    const refIdx = DATA.allDates.indexOf(referenceDate);
+    const latestDate = refIdx >= 0 ? DATA.allDates[refIdx] : DATA.allDates[DATA.allDates.length - 1];
+
+    // Show warning if selected date is outside dataset range
+    const dateWarning = document.getElementById('date-warning');
+    if (dateWarning) {
+      dateWarning.style.display = refIdx < 0 ? 'inline' : 'none';
+    }
+
     if (isHourly) {
       const hours = period === '1h' ? 1 : period === '4h' ? 4 : period === '6h' ? 6 : period === '12h' ? 12 : 24;
-      // Use referenceDate to find correct latest date
-      const refIdx = DATA.allDates.indexOf(referenceDate);
-      const latestDate = refIdx >= 0 ? DATA.allDates[refIdx] : DATA.allDates[DATA.allDates.length - 1];
 
       // Fallback to daily if hourly data is missing (e.g. live data without hourly)
       if (!DATA.hourlyData || !DATA.hourlyData.length) {
@@ -1332,7 +1313,7 @@ const CHARTS = (() => {
       });
 
       // Scale hourly summary by industry using actual daily data proportions (per-channel)
-      if (industry !== 'All' && user === 'All') {
+      if (industry !== 'All') {
         Object.keys(hourlySummary).forEach(ch => {
           const fullTx = DATA.dailyData[ch] && DATA.dailyData[ch][latestDate]
             ? DATA.dailyData[ch][latestDate].transactions : 0;
@@ -1381,13 +1362,16 @@ const CHARTS = (() => {
 
       // Scale hourly trend by industry
       let fullAllTx = 0, industryAllTx = 0;
-      if (industry !== 'All' && user === 'All') {
+      if (industry !== 'All') {
+        const indData = user !== 'All'
+          ? DATA.getDailyDataForRange(latestDate, latestDate, channel, industry, 'All')
+          : data;
         DATA.CHANNELS.forEach(ch => {
           if (DATA.dailyData[ch] && DATA.dailyData[ch][latestDate]) {
             fullAllTx += DATA.dailyData[ch][latestDate].transactions;
           }
-          if (data[ch] && data[ch][latestDate]) {
-            industryAllTx += data[ch][latestDate].transactions;
+          if (indData[ch] && indData[ch][latestDate]) {
+            industryAllTx += indData[ch][latestDate].transactions;
           }
         });
         const trendRatio = fullAllTx > 0 ? industryAllTx / fullAllTx : 0;
@@ -1425,7 +1409,7 @@ const CHARTS = (() => {
       }
 
       // Scale hourly charts by industry (trend + dataByChannel)
-      if (industry !== 'All' && user === 'All') {
+      if (industry !== 'All') {
         const trendRatio = fullAllTx > 0 ? industryAllTx / fullAllTx : 0;
         Object.keys(hourlyDataByChannel).forEach(ch => {
           Object.keys(hourlyDataByChannel[ch]).forEach(hk => {
@@ -1499,9 +1483,13 @@ const CHARTS = (() => {
       trend = DATA.computeDailyTrend(data, null, filteredUserCount);
     }
 
-    // Compute active user count based on filters
-    let activeUserCount = filteredUserCount;
-    let prevActiveUserCount = filteredUserCount;
+    // Compute active user count from trend data (actual activity, not static count)
+    let activeUserCount = 0;
+    if (trend && Object.keys(trend).length > 0) {
+      const totalActive = Object.values(trend).reduce((s, t) => s + t.activeUsers, 0);
+      activeUserCount = Math.round(totalActive / Object.keys(trend).length);
+    }
+    let prevActiveUserCount = 0;
     if (prevData && Object.keys(prevData).length > 0) {
       const prevTrend = DATA.computeDailyTrend(prevData, null, filteredUserCount);
       if (prevTrend && Object.keys(prevTrend).length > 0) {
@@ -1510,17 +1498,64 @@ const CHARTS = (() => {
       }
     }
 
+    // Compute churn data for current and previous periods
+    let churnData = null;
+    let prevChurnData = null;
+    if (DATA.computeChurnData) {
+      let curStart, curEnd;
+      if (isHourly) {
+        curStart = latestDate;
+        curEnd = latestDate;
+      } else if (period === 'all') {
+        curStart = DATA.allDates[0];
+        curEnd = DATA.allDates[DATA.allDates.length - 1];
+      } else {
+        const days = period === '7d' ? 7 : 30;
+        const endDate = new Date(referenceDate);
+        const startDate = new Date(endDate);
+        startDate.setDate(startDate.getDate() - days + 1);
+        curStart = startDate.toISOString().split('T')[0];
+        curEnd = endDate.toISOString().split('T')[0];
+      }
+      churnData = DATA.computeChurnData(curStart, curEnd, channel, industry, user);
+
+      // Previous period churn
+      if (period !== 'all') {
+        const isHr = ['1h', '4h', '6h', '12h', '24h'].includes(period);
+        if (isHr) {
+          const prevRefIdx = DATA.allDates.indexOf(referenceDate);
+          const prevDateIdx = prevRefIdx > 0 ? prevRefIdx - 1 : Math.max(0, DATA.allDates.length - 2);
+          const prevDate = DATA.allDates[prevDateIdx] || DATA.allDates[0];
+          prevChurnData = DATA.computeChurnData(prevDate, prevDate, channel, industry, user);
+        } else {
+          const days = period === '7d' ? 7 : 30;
+          const endDate = new Date(referenceDate);
+          const startDate = new Date(endDate);
+          startDate.setDate(startDate.getDate() - days + 1);
+          const prevEndDate = new Date(startDate);
+          prevEndDate.setDate(prevEndDate.getDate() - 1);
+          const prevStartDate = new Date(prevEndDate);
+          prevStartDate.setDate(prevStartDate.getDate() - days + 1);
+          prevChurnData = DATA.computeChurnData(
+            prevStartDate.toISOString().split('T')[0],
+            prevEndDate.toISOString().split('T')[0],
+            channel, industry, user
+          );
+        }
+      }
+    }
+
     // Guard: skip rendering if no data
     const hasData = data && Object.keys(data).length > 0 &&
                     Object.values(data).some(chData =>
                       Object.values(chData).some(r => r.transactions > 0));
     if (!hasData) {
-      updateKPIs(data || {}, prevData || {}, summary || {}, trend || {}, activeUserCount || 0, prevActiveUserCount || 0);
+      updateKPIs(data || {}, prevData || {}, summary || {}, trend || {}, activeUserCount || 0, prevActiveUserCount || 0, churnData, prevChurnData);
       return;
     }
 
     // Render everything
-    updateKPIs(data, prevData, summary, trend, activeUserCount, prevActiveUserCount);
+    updateKPIs(data, prevData, summary, trend, activeUserCount, prevActiveUserCount, churnData, prevChurnData);
     renderChannelVolume('chart-channel-volume', summary);
     renderRevenueDonut('chart-revenue-donut', summary);
     renderCombinedTrend('chart-combined-trend', trend);
