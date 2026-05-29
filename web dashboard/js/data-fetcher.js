@@ -74,7 +74,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
           return parts.join('-');
         }
       }
-      return d.replace(/^\d{4}/, String(currentYear));
+      return d;
     }
 
     const channels = Object.keys(resp.dailyDataByChannel || {});
@@ -231,6 +231,8 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby2NW3cXEd15Vdm
         const tx = obj.transactions;
         const succ = obj.success || 0;
         obj.failure = Math.max(0, tx - succ);
+        if (obj.fail != null) obj.fail = obj.failure;
+        if (obj.neutral != null) obj.neutral = 0;
       }
       return obj;
     }
