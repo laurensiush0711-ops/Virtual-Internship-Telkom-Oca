@@ -344,8 +344,8 @@ DATA = (() => {
   const initialTrend = computeDailyTrend(initialData);
 
   // ---- INACTIVITY COMPUTATION ----
-  // For each user, find the average interval (gap in days) between active days,
-  // then average across all filtered users.
+  // Average gap in days between active days across ALL users globally.
+  // avgInactiveInterval = round(total sum of all gaps / total count of all gaps)
   function computeInactivityData(startStr, endStr, channelFilter, industryFilter, userFilter) {
     const start = new Date(startStr);
     const end = new Date(endStr);
@@ -359,9 +359,9 @@ DATA = (() => {
     }
 
     const channelsToCheck = channelFilter && channelFilter !== 'All' ? [channelFilter] : CHANNELS;
-    let totalAvgInterval = 0;
+    let totalGapSum = 0;
+    let totalGapCount = 0;
     let maxInactiveDay = 0;
-    let userCount = 0;
 
     relevantUsers.forEach(u => {
       // Collect all dates where user had any transaction
@@ -387,40 +387,31 @@ DATA = (() => {
 
       // Calculate gaps between consecutive active days
       if (activeDates.length >= 2) {
-        let totalGap = 0;
-        let gapCount = 0;
-        let maxGap = 0;
-
         for (let i = 1; i < activeDates.length; i++) {
           const diffTime = activeDates[i].getTime() - activeDates[i - 1].getTime();
           const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-          totalGap += diffDays;
-          gapCount++;
-          if (diffDays > maxGap) maxGap = diffDays;
+          totalGapSum += diffDays;
+          totalGapCount++;
+          if (diffDays > maxInactiveDay) maxInactiveDay = diffDays;
         }
-
-        const avgGap = gapCount > 0 ? totalGap / gapCount : 0;
-        totalAvgInterval += avgGap;
-        if (maxGap > maxInactiveDay) maxInactiveDay = maxGap;
-        userCount++;
       } else if (activeDates.length === 1) {
         // User was active only once — gap from start to that date or that date to end
         const activeDate = activeDates[0];
         const diffFromStart = Math.round((activeDate - start) / (1000 * 60 * 60 * 24));
         const diffToEnd = Math.round((end - activeDate) / (1000 * 60 * 60 * 24));
         const singleGap = Math.max(diffFromStart, diffToEnd);
-        totalAvgInterval += singleGap;
+        totalGapSum += singleGap;
+        totalGapCount++;
         if (singleGap > maxInactiveDay) maxInactiveDay = singleGap;
-        userCount++;
       }
       // If user has 0 active days, skip (no interval to compute)
     });
 
-    const avgInactiveInterval = userCount > 0 ? Math.round(totalAvgInterval / userCount) : 0;
+    const avgInactiveInterval = totalGapCount > 0 ? Math.round(totalGapSum / totalGapCount) : 0;
 
     return {
       avgInactiveInterval,
-      totalUsers: userCount,
+      totalUsers: relevantUsers.length,
       maxInactiveDay
     };
   }
